@@ -21,8 +21,13 @@ import { useApp } from "../contexts/AppContext";
 import BookingDetailsScreen from "../components/BookingDetailsScreen";
 
 const BookingsScreen = () => {
-  const { bookingsData } = useApp();
+  const { bookingsData, loadBookings } = useApp();
   const [selectedBooking, setSelectedBooking] = React.useState(null);
+
+  // Fetch fresh bookings when screen loads (force refresh, update cache)
+  useEffect(() => {
+    loadBookings(true);
+  }, [loadBookings]);
 
   // Sort all bookings by date in descending order (newest first)
   const sortedBookings = useMemo(() => {
@@ -55,7 +60,7 @@ const BookingsScreen = () => {
 
     const backHandler = BackHandler.addEventListener(
       "hardwareBackPress",
-      backAction
+      backAction,
     );
 
     return () => {
@@ -138,16 +143,16 @@ const BookingsScreen = () => {
                 isToday
                   ? "today-outline"
                   : isUpcoming
-                  ? "calendar-outline"
-                  : "time-outline"
+                    ? "calendar-outline"
+                    : "time-outline"
               }
               size={24}
               color={
                 isToday
                   ? colors.primary
                   : isUpcoming
-                  ? colors.success
-                  : colors.textSecondary
+                    ? colors.success
+                    : colors.textSecondary
               }
             />
           </View>

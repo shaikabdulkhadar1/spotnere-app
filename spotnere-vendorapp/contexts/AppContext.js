@@ -10,9 +10,11 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
+import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getCurrentUser } from "../utils/auth";
 import { supabase } from "../config/supabase";
+import { useToast } from "./ToastContext";
 
 const AppContext = createContext();
 
@@ -25,12 +27,15 @@ const CACHE_KEYS = {
   PLACE_TIMESTAMP: "@app_cache_place_timestamp",
   REVIEWS: "@app_cache_reviews",
   REVIEWS_TIMESTAMP: "@app_cache_reviews_timestamp",
+  NOTIFICATIONS: "@app_cache_notifications",
+  NOTIFICATIONS_TIMESTAMP: "@app_cache_notifications_timestamp",
 };
 
 // Cache expiration time (5 minutes)
 const CACHE_EXPIRY = 5 * 60 * 1000;
 
 export const AppProvider = ({ children }) => {
+  const { showToast } = useToast();
   const [user, setUser] = useState(null);
   const [bookingsData, setBookingsData] = useState({
     total: 0,
@@ -43,6 +48,12 @@ export const AppProvider = ({ children }) => {
   const [reviewsData, setReviewsData] = useState({
     reviews: [],
     summary: { average: 0, count: 0 },
+    loading: true,
+    error: null,
+  });
+  const [notificationsData, setNotificationsData] = useState({
+    notifications: [],
+    unreadCount: 0,
     loading: true,
     error: null,
   });
@@ -414,6 +425,93 @@ export const AppProvider = ({ children }) => {
     [user?.place_id, checkReviewsCache],
   );
 
+  // Mark all notifications as read for a vendor
+  const markAllNotificationsAsRead = useCallback(
+    async (vendorId = null) => {
+      const vid = vendorId ?? user?.id;
+      if (!vid) return;
+      try {
+        const { error } = await supabase
+          .from("vendor_notifications")
+          .update({ is_read: true })
+          .eq("vendor_id", vid)
+          .eq("is_read", false);
+
+        if (error) throw error;
+
+        // Update local state and cache
+        setNotificationsData((prev) => {
+          const updated = (prev.notifications || []).map((n) => ({ ...n, is_read: true }));
+          AsyncStorage.setItem(
+            CACHE_KEYS.NOTIFICATIONS,
+            JSON.stringify({ notifications: updated, unreadCount: 0 })
+          ).catch((err) => console.warn("Cache update failed:", err));
+          return { ...prev, notifications: updated, unreadCount: 0 };
+        });
+      } catch (error) {
+        console.error("Error marking notifications as read:", error);
+      }
+    },
+    [user?.id]
+  );
+
+  // Load vendor notifications from vendor_notifications table
+  const loadNotifications = useCallback(
+    async (forceRefresh = false, vendorId = null) => {
+      const vid = vendorId ?? user?.id;
+      try {
+        if (!vid) {
+          setNotificationsData({
+            notifications: [],
+            unreadCount: 0,
+            loading: false,
+            error: null,
+          });
+          return;
+        }
+
+        setNotificationsData((prev) => ({ ...prev, loading: true, error: null }));
+
+        const { data: notifications, error } = await supabase
+          .from("vendor_notifications")
+          .select("id, vendor_id, place_id, booking_id, type, title, body, is_read, created_at")
+          .eq("vendor_id", vid)
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          throw error;
+        }
+
+        const list = notifications || [];
+        const unreadCount = list.filter((n) => n.is_read === false).length;
+
+        setNotificationsData({
+          notifications: list,
+          unreadCount,
+          loading: false,
+          error: null,
+        });
+
+        await AsyncStorage.setItem(
+          CACHE_KEYS.NOTIFICATIONS,
+          JSON.stringify({ notifications: list, unreadCount })
+        );
+        await AsyncStorage.setItem(
+          CACHE_KEYS.NOTIFICATIONS_TIMESTAMP,
+          Date.now().toString()
+        );
+      } catch (error) {
+        console.error("Error loading notifications:", error);
+        setNotificationsData((prev) => ({
+          ...prev,
+          loading: false,
+          error: error?.message ?? "Failed to load notifications",
+        }));
+      }
+    },
+    [user?.id]
+  );
+
   // Load data for HomeScreen - checks cache first, then fetches if needed
   const loadHomeScreenData = useCallback(async () => {
     try {
@@ -482,6 +580,11 @@ export const AppProvider = ({ children }) => {
           // Cache miss - fetch fresh reviews data
           await loadReviews(true);
         }
+
+        // Load notifications (vendor_id = currentUserData.id)
+        if (currentUserData?.id) {
+          await loadNotifications(true, currentUserData.id);
+        }
       } else {
         setBookingsData({
           total: 0,
@@ -497,13 +600,19 @@ export const AppProvider = ({ children }) => {
           loading: false,
           error: null,
         });
+        setNotificationsData({
+          notifications: [],
+          unreadCount: 0,
+          loading: false,
+          error: null,
+        });
       }
     } catch (error) {
       console.error("Error loading HomeScreen data:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [checkBookingsCache, loadBookings, checkPlaceCache, checkReviewsCache, loadReviews]);
+  }, [checkBookingsCache, loadBookings, checkPlaceCache, checkReviewsCache, loadReviews, loadNotifications]);
 
   // Check cache for place data
   const checkPlaceCache = useCallback(async () => {
@@ -587,6 +696,8 @@ export const AppProvider = ({ children }) => {
         CACHE_KEYS.PLACE_TIMESTAMP,
         CACHE_KEYS.REVIEWS,
         CACHE_KEYS.REVIEWS_TIMESTAMP,
+        CACHE_KEYS.NOTIFICATIONS,
+        CACHE_KEYS.NOTIFICATIONS_TIMESTAMP,
       ]);
     } catch (error) {
       console.error("Error clearing cache:", error);
@@ -596,9 +707,11 @@ export const AppProvider = ({ children }) => {
   // Refresh all data
   const refreshData = useCallback(async () => {
     await loadUser();
+    const currentUser = await getCurrentUser();
     await loadBookings(true);
     await loadReviews(true);
-  }, [loadUser, loadBookings, loadReviews]);
+    await loadNotifications(true, currentUser?.id);
+  }, [loadUser, loadBookings, loadReviews, loadNotifications]);
 
   // Initialize with empty state - HomeScreen will load data when needed
   useEffect(() => {
@@ -606,16 +719,81 @@ export const AppProvider = ({ children }) => {
     setIsLoading(false);
   }, []);
 
+  // Subscribe to realtime notifications when vendor is logged in
+  useEffect(() => {
+    const vendorId = user?.id;
+    if (!vendorId) return;
+
+    const channel = supabase
+      .channel(`vendor-notifications-${vendorId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "vendor_notifications",
+          filter: `vendor_id=eq.${vendorId}`,
+        },
+        (payload) => {
+          const newRow = payload.new;
+          if (!newRow) return;
+
+          if (AppState.currentState === "active") {
+            showToast("New booking received 🎉");
+          }
+
+          setNotificationsData((prev) => {
+            if (!prev) return prev;
+            const existingIds = new Set((prev.notifications || []).map((n) => n.id));
+            if (existingIds.has(newRow.id)) return prev;
+
+            const notification = {
+              id: newRow.id,
+              vendor_id: newRow.vendor_id,
+              place_id: newRow.place_id,
+              booking_id: newRow.booking_id,
+              type: newRow.type,
+              title: newRow.title,
+              body: newRow.body,
+              is_read: newRow.is_read ?? false,
+              created_at: newRow.created_at,
+            };
+            const updated = [notification, ...(prev.notifications || [])];
+            const newUnreadCount = (prev.unreadCount || 0) + 1;
+
+            AsyncStorage.setItem(
+              CACHE_KEYS.NOTIFICATIONS,
+              JSON.stringify({ notifications: updated, unreadCount: newUnreadCount })
+            ).catch((err) => console.warn("Cache update failed:", err));
+
+            return {
+              ...prev,
+              notifications: updated,
+              unreadCount: newUnreadCount,
+            };
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, showToast]);
+
   const value = {
     user,
     bookingsData,
     placeData,
     reviewsData,
+    notificationsData,
     isLoading,
     loadUser,
     loadBookings,
     loadPlace,
     loadReviews,
+    loadNotifications,
+    markAllNotificationsAsRead,
     loadHomeScreenData,
     refreshData,
     clearCache,

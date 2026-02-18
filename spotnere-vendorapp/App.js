@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { StyleSheet, View, ActivityIndicator, BackHandler, Platform } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
@@ -11,16 +11,18 @@ import BottomNavBar from "./components/BottomNavBar";
 import PlaceDetailsOnboarding from "./components/PlaceDetailsOnboarding";
 import BankDetailsOnboarding from "./components/BankDetailsOnboarding";
 import ReviewsScreen from "./screens/ReviewsScreen";
+import NotificationsScreen from "./screens/NotificationsScreen";
 import { colors } from "./constants/colors";
 import { isLoggedIn } from "./utils/auth";
 import { AppProvider, useApp } from "./contexts/AppContext";
+import { ToastProvider } from "./contexts/ToastContext";
 import {
   registerAndStorePushToken,
   clearPushToken,
 } from "./utils/pushNotifications";
 
 function AppContent() {
-  const { user, refreshData, clearCache } = useApp();
+  const { user, refreshData, clearCache, markAllNotificationsAsRead } = useApp();
 
   const [fontsLoaded] = useFonts({
     "Parkinsans-Light": require("./assets/fonts/Parkinsans-Light.ttf"),
@@ -38,6 +40,7 @@ function AppContent() {
   const [checkingOnboarding, setCheckingOnboarding] = useState(false);
   const [activeTab, setActiveTab] = useState("home");
   const [showReviewsScreen, setShowReviewsScreen] = useState(false);
+  const [showNotificationsScreen, setShowNotificationsScreen] = useState(false);
 
   useEffect(() => {
     checkAuthStatus();
@@ -50,6 +53,11 @@ function AppContent() {
     }
 
     const backAction = () => {
+      // If NotificationsScreen is showing, go back
+      if (showNotificationsScreen) {
+        handleBackFromNotifications();
+        return true;
+      }
       // If ReviewsScreen is showing (component-like screen), go back one step
       if (showReviewsScreen) {
         handleBackFromReviews();
@@ -75,7 +83,7 @@ function AppContent() {
     return () => {
       backHandler.remove();
     };
-  }, [activeTab, showReviewsScreen]);
+  }, [activeTab, showReviewsScreen, showNotificationsScreen, handleBackFromNotifications]);
 
   useEffect(() => {
     // Check onboarding status when user becomes available
@@ -288,15 +296,27 @@ function AppContent() {
     setShowReviewsScreen(false);
   };
 
-  const handleTabChange = (tab) => {
-    // Hide ReviewsScreen when switching tabs via navbar
-    if (showReviewsScreen) {
-      setShowReviewsScreen(false);
+  const handleNavigateToNotifications = () => {
+    setShowNotificationsScreen(true);
+  };
+
+  const handleBackFromNotifications = useCallback(() => {
+    if (user?.id) {
+      markAllNotificationsAsRead(user.id); // Mark as read in DB (fire-and-forget)
     }
+    setShowNotificationsScreen(false);
+  }, [user?.id, markAllNotificationsAsRead]);
+
+  const handleTabChange = (tab) => {
+    if (showReviewsScreen) setShowReviewsScreen(false);
+    if (showNotificationsScreen) setShowNotificationsScreen(false);
     setActiveTab(tab);
   };
 
   const renderScreen = () => {
+    if (showNotificationsScreen) {
+      return <NotificationsScreen onBack={handleBackFromNotifications} />;
+    }
     if (showReviewsScreen) {
       return <ReviewsScreen onBack={handleBackFromReviews} />;
     }
@@ -307,6 +327,7 @@ function AppContent() {
           <HomeScreen
             onNavigateToBookings={handleNavigateToBookings}
             onNavigateToReviews={handleNavigateToReviews}
+            onNavigateToNotifications={handleNavigateToNotifications}
           />
         );
       case "bookings":
@@ -320,6 +341,7 @@ function AppContent() {
           <HomeScreen
             onNavigateToBookings={handleNavigateToBookings}
             onNavigateToReviews={handleNavigateToReviews}
+            onNavigateToNotifications={handleNavigateToNotifications}
           />
         );
     }
@@ -379,9 +401,11 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
+    <ToastProvider>
+      <AppProvider>
+        <AppContent />
+      </AppProvider>
+    </ToastProvider>
   );
 }
 

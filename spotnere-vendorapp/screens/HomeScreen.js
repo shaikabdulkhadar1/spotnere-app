@@ -44,12 +44,17 @@ const getTrendMeta = (pct) => {
   return { icon: "trending-down", color: colors.error };
 };
 
-const HomeScreen = ({ onNavigateToBookings, onNavigateToReviews }) => {
+const HomeScreen = ({
+  onNavigateToBookings,
+  onNavigateToReviews,
+  onNavigateToNotifications,
+}) => {
   const {
     user,
     bookingsData,
     placeData,
     reviewsData,
+    notificationsData,
     loadHomeScreenData,
     loadReviews,
   } = useApp();
@@ -254,6 +259,15 @@ const HomeScreen = ({ onNavigateToBookings, onNavigateToReviews }) => {
                 size={22}
                 color={colors.text}
               />
+              {(notificationsData?.unreadCount ?? 0) > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                    {notificationsData.unreadCount > 99
+                      ? "99+"
+                      : notificationsData.unreadCount}
+                  </Text>
+                </View>
+              )}
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -521,6 +535,8 @@ const HomeScreen = ({ onNavigateToBookings, onNavigateToReviews }) => {
         visible={showNotificationsModal}
         onClose={() => setShowNotificationsModal(false)}
         notificationButtonLayout={notificationButtonLayout}
+        notifications={notificationsData?.notifications?.slice(0, 2) ?? []}
+        onShowAll={onNavigateToNotifications}
       />
     </ScrollView>
   );
@@ -594,6 +610,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: colors.border,
+    position: "relative",
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.error,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    fontSize: 11,
+    fontFamily: fonts.semiBold,
+    color: "#fff",
   },
 
   card: {
