@@ -58,6 +58,7 @@ export const AppProvider = ({ children }) => {
     error: null,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [bannerCacheBuster, setBannerCacheBuster] = useState(0);
 
   // Load user data
   const loadUser = useCallback(async () => {
@@ -562,8 +563,12 @@ export const AppProvider = ({ children }) => {
               console.error("Error fetching place data:", error);
             } else if (data) {
               setPlaceData(data);
-              // Cache the place data
-              await AsyncStorage.setItem(CACHE_KEYS.PLACE, JSON.stringify(data));
+              // Cache place details only (exclude banner_image_link)
+              const { banner_image_link: _b, ...placeForCache } = data;
+              await AsyncStorage.setItem(
+                CACHE_KEYS.PLACE,
+                JSON.stringify(placeForCache)
+              );
               await AsyncStorage.setItem(
                 CACHE_KEYS.PLACE_TIMESTAMP,
                 Date.now().toString()
@@ -614,7 +619,7 @@ export const AppProvider = ({ children }) => {
     }
   }, [checkBookingsCache, loadBookings, checkPlaceCache, checkReviewsCache, loadReviews, loadNotifications]);
 
-  // Check cache for place data
+  // Check cache for place data (banner_image_link is excluded from cache, fetched fresh)
   const checkPlaceCache = useCallback(async () => {
     try {
       const cachedPlace = await AsyncStorage.getItem(CACHE_KEYS.PLACE);
@@ -629,7 +634,20 @@ export const AppProvider = ({ children }) => {
         // Use cache if it's still valid
         if (now - timestamp < CACHE_EXPIRY) {
           const parsedPlace = JSON.parse(cachedPlace);
-          setPlaceData(parsedPlace);
+          const placeId = parsedPlace?.id;
+          if (placeId) {
+            const { data: bannerData } = await supabase
+              .from("places")
+              .select("banner_image_link")
+              .eq("id", placeId)
+              .single();
+            setPlaceData({
+              ...parsedPlace,
+              banner_image_link: bannerData?.banner_image_link ?? null,
+            });
+          } else {
+            setPlaceData(parsedPlace);
+          }
           return true; // Cache hit
         }
       }
@@ -639,6 +657,28 @@ export const AppProvider = ({ children }) => {
       return false;
     }
   }, []);
+
+  // Refetch only banner_image_link (lightweight, for Vendu Details screen)
+  const loadBannerImage = useCallback(async () => {
+    const placeId = user?.place_id || placeData?.id;
+    if (!placeId) return;
+    try {
+      const { data, error } = await supabase
+        .from("places")
+        .select("banner_image_link")
+        .eq("id", placeId)
+        .single();
+      if (error) throw error;
+      if (data) {
+        setPlaceData((prev) =>
+          prev ? { ...prev, banner_image_link: data.banner_image_link } : prev
+        );
+        setBannerCacheBuster(Date.now());
+      }
+    } catch (err) {
+      console.error("Error loading banner image:", err);
+    }
+  }, [user?.place_id, placeData?.id]);
 
   // Load place data with caching
   const loadPlace = useCallback(
@@ -671,8 +711,12 @@ export const AppProvider = ({ children }) => {
 
         if (data) {
           setPlaceData(data);
-          // Cache the place data
-          await AsyncStorage.setItem(CACHE_KEYS.PLACE, JSON.stringify(data));
+          // Cache place details only (exclude banner_image_link)
+          const { banner_image_link: _b, ...placeForCache } = data;
+          await AsyncStorage.setItem(
+            CACHE_KEYS.PLACE,
+            JSON.stringify(placeForCache)
+          );
           await AsyncStorage.setItem(
             CACHE_KEYS.PLACE_TIMESTAMP,
             Date.now().toString()
@@ -785,12 +829,14 @@ export const AppProvider = ({ children }) => {
     user,
     bookingsData,
     placeData,
+    bannerCacheBuster,
     reviewsData,
     notificationsData,
     isLoading,
     loadUser,
     loadBookings,
     loadPlace,
+    loadBannerImage,
     loadReviews,
     loadNotifications,
     markAllNotificationsAsRead,

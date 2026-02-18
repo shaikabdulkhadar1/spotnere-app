@@ -40,7 +40,8 @@ const DAYS_OF_WEEK = [
 ];
 
 const VenduDetailsScreen = () => {
-  const { user, placeData, loadPlace } = useApp();
+  const { user, placeData, loadPlace, loadBannerImage, bannerCacheBuster } =
+    useApp();
   const [loading, setLoading] = React.useState(false);
   const [galleryImages, setGalleryImages] = React.useState([]);
   const [isEditing, setIsEditing] = React.useState(false);
@@ -96,6 +97,12 @@ const VenduDetailsScreen = () => {
       loadPlace(false);
     }
   }, [user?.place_id, loadPlace]);
+
+  React.useEffect(() => {
+    if (placeData?.id) {
+      loadBannerImage();
+    }
+  }, [placeData?.id, loadBannerImage]);
 
   React.useEffect(() => {
     if (placeData?.id) {
@@ -249,8 +256,10 @@ const VenduDetailsScreen = () => {
     return null;
   };
 
-  // Banner image from place data
-  const bannerImage = placeData?.banner_image_link || null;
+  // Banner image from place data (cache-bust to show fresh image after refetch)
+  const bannerImage = placeData?.banner_image_link
+    ? `${placeData.banner_image_link}${placeData.banner_image_link.includes("?") ? "&" : "?"}t=${bannerCacheBuster || 0}`
+    : null;
 
   const handlePickBannerImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -281,12 +290,23 @@ const VenduDetailsScreen = () => {
     setIsUploadingBanner(true);
     try {
       const placeId = user.place_id;
-      const fileName = `${placeId}/banner-${placeId}.jpg`;
+
+      // Delete old banner from storage if it exists
+      const oldBannerUrl = placeData?.banner_image_link;
+      if (oldBannerUrl) {
+        const pathMatch = oldBannerUrl.match(/places_images\/(.+)$/);
+        if (pathMatch?.[1]) {
+          const oldPath = decodeURIComponent(pathMatch[1]);
+          await supabase.storage.from("places_images").remove([oldPath]);
+        }
+      }
+
+      const fileName = `${placeId}/banner-${placeId}-${Date.now()}.jpg`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("places_images")
         .upload(fileName, decode(bannerPreviewBase64), {
           contentType: "image/jpeg",
-          upsert: false,
+          upsert: true,
         });
       if (uploadError) {
         throw uploadError;
@@ -351,7 +371,7 @@ const VenduDetailsScreen = () => {
       for (let i = 0; i < galleryPreviewItems.length; i++) {
         const item = galleryPreviewItems[i];
         if (!item.base64) continue;
-        const fileName = `${placeId}/gallery-${placeId}-${i}.jpg`;
+        const fileName = `${placeId}/gallery-${placeId}-${Date.now()}.jpg`;
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from("places_images")
           .upload(fileName, decode(item.base64), {
