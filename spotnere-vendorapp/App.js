@@ -14,6 +14,10 @@ import ReviewsScreen from "./screens/ReviewsScreen";
 import { colors } from "./constants/colors";
 import { isLoggedIn } from "./utils/auth";
 import { AppProvider, useApp } from "./contexts/AppContext";
+import {
+  registerAndStorePushToken,
+  clearPushToken,
+} from "./utils/pushNotifications";
 
 function AppContent() {
   const { user, refreshData, clearCache } = useApp();
@@ -77,6 +81,15 @@ function AppContent() {
     // Check onboarding status when user becomes available
     if (isAuthenticated && user?.id && !checkingOnboarding && !showPlaceOnboarding && !showBankOnboarding) {
       checkOnboardingStatus();
+    }
+  }, [isAuthenticated, user?.id]);
+
+  // Register push token when app opens and vendor is authenticated
+  useEffect(() => {
+    if (isAuthenticated && user?.id) {
+      registerAndStorePushToken(user.id).catch((err) =>
+        console.warn("Push registration failed:", err)
+      );
     }
   }, [isAuthenticated, user?.id]);
 
@@ -249,7 +262,9 @@ function AppContent() {
   };
 
   const handleLogout = async () => {
-    // Clear cache on logout
+    if (user?.id) {
+      await clearPushToken(user.id);
+    }
     await clearCache();
     setIsAuthenticated(false);
     setActiveTab("home");

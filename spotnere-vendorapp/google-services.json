@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1036011238122",
+    "project_id": "spotnere-19ffc",
+    "storage_bucket": "spotnere-19ffc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1036011238122:android:0a3078804b1d2913679d93",
+        "android_client_info": {
+          "package_name": "com.spotnere.vendor"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCszu-Wnf88j82euYlWuNED_IqZAnqfiZo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

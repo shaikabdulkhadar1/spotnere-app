@@ -38,15 +38,29 @@ export default {
     android: {
       package: "com.spotnere.vendor",
       versionCode: 1,
+      googleServicesFile: "./google-services.json",
       adaptiveIcon: {
         foregroundImage: "./assets/icons/adaptive-icon.png",
         backgroundColor: "#ffffff",
       },
-      permissions: ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"],
+      permissions: [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "POST_NOTIFICATIONS",
+      ],
     },
     web: {
       favicon: "./assets/favicon.png",
     },
+    plugins: [
+      [
+        "expo-notifications",
+        {
+          icon: "./assets/icons/adaptive-icon.png",
+          color: "#0B57D0",
+        },
+      ],
+    ],
     extra: {
       supabaseUrl: process.env.SUPABASE_URL,
       supabaseAnonKey:

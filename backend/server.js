@@ -111,7 +111,7 @@ app.post(
             ? "FAILED"
             : "PENDING";
 
-      await updateBookingById(booking.id, {
+      const updatedBooking = await updateBookingById(booking.id, {
         payment_status: finalStatus,
         razorpay_payment_id: paymentEntity?.id || booking.razorpay_payment_id,
         transaction_id: paymentEntity?.id || booking.transaction_id,
@@ -131,6 +131,10 @@ app.post(
               "Payment failed"
             : null,
       });
+
+      if (finalStatus === "SUCCESS" && updatedBooking) {
+        await insertVendorNotificationForBooking(updatedBooking);
+      }
 
       return res.json({ received: true });
     } catch (err) {
@@ -176,6 +180,118 @@ async function findBookingByOrderId(orderId) {
 
   if (error) throw error;
   return data;
+}
+
+const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+
+/**
+ * Send a push notification via Expo's push API.
+ * @param {string} pushToken - ExponentPushToken[xxx]
+ * @param {string} title - Notification title
+ * @param {string} body - Notification body
+ * @param {object} [data] - Optional data payload for tap handling
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function sendExpoPushNotification(pushToken, title, body, data = {}) {
+  if (!pushToken || typeof pushToken !== "string" || !pushToken.trim()) {
+    return { success: false, error: "Invalid push token" };
+  }
+
+  try {
+    const res = await fetch(EXPO_PUSH_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: pushToken.trim(),
+        title,
+        body,
+        data,
+      }),
+    });
+
+    const result = await res.json();
+
+    if (!res.ok) {
+      console.error("Expo push error:", result);
+      return {
+        success: false,
+        error: result?.errors?.[0]?.message ?? result?.message ?? "Push failed",
+      };
+    }
+
+    if (result?.data?.status === "error") {
+      const errMsg = result.data.message ?? "Push delivery failed";
+      console.warn("Expo push delivery error:", errMsg);
+      return { success: false, error: errMsg };
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error("Expo push request failed:", err);
+    return {
+      success: false,
+      error: err?.message ?? "Push request failed",
+    };
+  }
+}
+
+/**
+ * Insert a vendor notification when payment succeeds.
+ * Fetches vendor_id and push_token from vendors by place_id, inserts into vendor_notifications,
+ * and sends a push notification if push_token exists.
+ */
+async function insertVendorNotificationForBooking(booking) {
+  if (!booking?.place_id || !booking?.id) return;
+
+  const { data: vendor, error: vendorError } = await supabaseAdmin
+    .from("vendors")
+    .select("id, push_token")
+    .eq("place_id", booking.place_id)
+    .maybeSingle();
+
+  if (vendorError || !vendor?.id) {
+    console.warn("Could not find vendor for place_id:", booking.place_id);
+    return;
+  }
+
+  const bookingDate = booking.booking_date_time
+    ? new Date(booking.booking_date_time).toLocaleString("en-IN", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : "scheduled";
+
+  const title = "New booking";
+  const body = `You have a new booking for ${bookingDate}. Amount: ₹${Number(booking.amount_paid || 0).toLocaleString("en-IN")}`;
+
+  const { error: insertError } = await supabaseAdmin
+    .from("vendor_notifications")
+    .insert({
+      vendor_id: vendor.id,
+      place_id: booking.place_id,
+      booking_id: booking.id,
+      type: "NEW_BOOKING",
+      title,
+      body,
+    });
+
+  if (insertError) {
+    console.error("Failed to insert vendor notification:", insertError);
+  }
+
+  if (vendor?.push_token) {
+    const pushResult = await sendExpoPushNotification(
+      vendor.push_token,
+      title,
+      body,
+      { type: "NEW_BOOKING", bookingId: booking.id, placeId: booking.place_id }
+    );
+    if (!pushResult.success) {
+      console.warn("Push notification failed:", pushResult.error);
+    }
+  }
 }
 
 // ---------- Routes ----------
@@ -420,6 +536,10 @@ app.post("/payments/razorpay/verify", async (req, res) => {
           ? payment.error_description || "Payment failed"
           : null,
     });
+
+    if (finalStatus === "SUCCESS" && booking) {
+      await insertVendorNotificationForBooking(booking);
+    }
 
     return res.json({
       status: finalStatus,
