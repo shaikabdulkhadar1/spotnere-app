@@ -52,17 +52,17 @@ const BookingDetailsScreen = ({ booking, onBack }) => {
     if (!booking.booking_date_time) return "unknown";
     const bookingDate = new Date(booking.booking_date_time);
     const now = new Date();
-    
+
     // Check if booking is today
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date(now);
     todayEnd.setHours(23, 59, 59, 999);
-    
+
     if (bookingDate >= todayStart && bookingDate <= todayEnd) {
       return "today";
     }
-    
+
     return bookingDate >= now ? "upcoming" : "past";
   };
 
@@ -73,7 +73,7 @@ const BookingDetailsScreen = ({ booking, onBack }) => {
   const handleReceiptPress = () => {
     if (booking.receipt_url) {
       Linking.openURL(booking.receipt_url).catch((err) =>
-        console.error("Error opening receipt URL:", err)
+        console.error("Error opening receipt URL:", err),
       );
     }
   };
@@ -95,8 +95,8 @@ const BookingDetailsScreen = ({ booking, onBack }) => {
               isToday
                 ? styles.statusBadgeToday
                 : isUpcoming
-                ? styles.statusBadgeUpcoming
-                : styles.statusBadgePast,
+                  ? styles.statusBadgeUpcoming
+                  : styles.statusBadgePast,
             ]}
           >
             <Text
@@ -105,8 +105,8 @@ const BookingDetailsScreen = ({ booking, onBack }) => {
                 isToday
                   ? styles.statusBadgeTextToday
                   : isUpcoming
-                  ? styles.statusBadgeTextUpcoming
-                  : styles.statusBadgeTextPast,
+                    ? styles.statusBadgeTextUpcoming
+                    : styles.statusBadgeTextPast,
               ]}
             >
               {isToday ? "Today" : isUpcoming ? "Upcoming" : "Past"}
@@ -329,11 +329,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardBackground,
     borderRadius: 12,
     padding: 16,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: colors.cardBackground,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 2,
   },
   cardHeader: {
     flexDirection: "row",

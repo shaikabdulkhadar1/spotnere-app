@@ -96,7 +96,6 @@ export async function registerAndStorePushToken(vendorId) {
       return { success: false, error: error.message };
     }
 
-    console.log("Push token stored for vendor:", vendorId);
     return { success: true };
   } catch (error) {
     console.error("Error registering push token:", error);

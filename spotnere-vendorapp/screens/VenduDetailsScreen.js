@@ -19,6 +19,8 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import { decode } from "base64-arraybuffer";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
 import { supabase } from "../config/supabase";
@@ -49,6 +51,17 @@ const VenduDetailsScreen = () => {
   const [showCityModal, setShowCityModal] = React.useState(false);
   const [selectedCountryCode, setSelectedCountryCode] = React.useState("");
   const [selectedStateCode, setSelectedStateCode] = React.useState("");
+  const [showBannerPreviewModal, setShowBannerPreviewModal] =
+    React.useState(false);
+  const [bannerPreviewUri, setBannerPreviewUri] = React.useState(null);
+  const [bannerPreviewBase64, setBannerPreviewBase64] = React.useState(null);
+  const [isUploadingBanner, setIsUploadingBanner] = React.useState(false);
+  const [showGalleryPreviewModal, setShowGalleryPreviewModal] =
+    React.useState(false);
+  const [galleryPreviewItems, setGalleryPreviewItems] = React.useState([]);
+  const [isUploadingGallery, setIsUploadingGallery] = React.useState(false);
+  const [isDeleteMode, setIsDeleteMode] = React.useState(false);
+  const [selectedImageIds, setSelectedImageIds] = React.useState([]);
 
   // Helper function to format time value (e.g., "09:00" to "9:00 AM")
   const formatTimeValue = (timeValue) => {
@@ -62,12 +75,33 @@ const VenduDetailsScreen = () => {
     return `${displayHour}:${minutes || "00"} ${ampm}`;
   };
 
+  const loadGalleryImages = React.useCallback(async () => {
+    const placeId = user?.place_id || placeData?.id;
+    if (!placeId) return;
+    try {
+      const { data, error } = await supabase
+        .from("gallery_images")
+        .select("id, gallery_image_url")
+        .eq("place_id", placeId)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      setGalleryImages(data || []);
+    } catch (err) {
+      console.error("Error loading gallery:", err);
+    }
+  }, [user?.place_id, placeData?.id]);
+
   React.useEffect(() => {
     if (user?.place_id) {
-      // Check cache first, then fetch if needed
       loadPlace(false);
     }
   }, [user?.place_id, loadPlace]);
+
+  React.useEffect(() => {
+    if (placeData?.id) {
+      loadGalleryImages();
+    }
+  }, [placeData?.id, loadGalleryImages]);
 
   // Initialize form data when placeData is available
   React.useEffect(() => {
@@ -217,6 +251,209 @@ const VenduDetailsScreen = () => {
 
   // Banner image from place data
   const bannerImage = placeData?.banner_image_link || null;
+
+  const handlePickBannerImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission required",
+        "Please allow access to your photo library to select a banner image.",
+      );
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+      base64: true,
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      const asset = result.assets[0];
+      setBannerPreviewUri(asset.uri);
+      setBannerPreviewBase64(asset.base64);
+      setShowBannerPreviewModal(true);
+    }
+  };
+
+  const handleUploadBannerImage = async () => {
+    if (!bannerPreviewBase64 || !user?.place_id) return;
+    setIsUploadingBanner(true);
+    try {
+      const placeId = user.place_id;
+      const fileName = `${placeId}/banner-${placeId}.jpg`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("places_images")
+        .upload(fileName, decode(bannerPreviewBase64), {
+          contentType: "image/jpeg",
+          upsert: false,
+        });
+      if (uploadError) {
+        throw uploadError;
+      }
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("places_images").getPublicUrl(uploadData.path);
+      const { error: updateError } = await supabase
+        .from("places")
+        .update({
+          banner_image_link: publicUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", placeId);
+      if (updateError) throw updateError;
+      await loadPlace(true);
+      setShowBannerPreviewModal(false);
+      setBannerPreviewUri(null);
+      setBannerPreviewBase64(null);
+    } catch (err) {
+      console.error("Banner upload error:", err);
+      Alert.alert(
+        "Upload failed",
+        err?.message ||
+          "Could not upload banner. Ensure the 'places_images' storage bucket exists in Supabase.",
+      );
+    } finally {
+      setIsUploadingBanner(false);
+    }
+  };
+
+  const handlePickGalleryImages = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission required",
+        "Please allow access to your photo library to select gallery images.",
+      );
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsMultipleSelection: true,
+      allowsEditing: false,
+      quality: 0.8,
+      base64: true,
+    });
+    if (!result.canceled && result.assets?.length > 0) {
+      setGalleryPreviewItems(
+        result.assets.map((a) => ({ uri: a.uri, base64: a.base64 })),
+      );
+      setShowGalleryPreviewModal(true);
+    }
+  };
+
+  const handleUploadGalleryImages = async () => {
+    if (!galleryPreviewItems.length || !user?.place_id) return;
+    setIsUploadingGallery(true);
+    try {
+      const placeId = user.place_id;
+      const urls = [];
+      for (let i = 0; i < galleryPreviewItems.length; i++) {
+        const item = galleryPreviewItems[i];
+        if (!item.base64) continue;
+        const fileName = `${placeId}/gallery-${placeId}-${i}.jpg`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("places_images")
+          .upload(fileName, decode(item.base64), {
+            contentType: "image/jpeg",
+            upsert: false,
+          });
+        if (uploadError) throw uploadError;
+        const {
+          data: { publicUrl },
+        } = supabase.storage
+          .from("places_images")
+          .getPublicUrl(uploadData.path);
+        urls.push(publicUrl);
+      }
+      const { error: insertError } = await supabase
+        .from("gallery_images")
+        .insert(
+          urls.map((gallery_image_url) => ({
+            place_id: placeId,
+            gallery_image_url,
+          })),
+        );
+      if (insertError) throw insertError;
+      await loadGalleryImages();
+      setShowGalleryPreviewModal(false);
+      setGalleryPreviewItems([]);
+    } catch (err) {
+      console.error("Gallery upload error:", err);
+      Alert.alert(
+        "Upload failed",
+        err?.message || "Could not upload gallery images. Please try again.",
+      );
+    } finally {
+      setIsUploadingGallery(false);
+    }
+  };
+
+  const handleToggleDeleteMode = () => {
+    if (isDeleteMode) {
+      setSelectedImageIds([]);
+    }
+    setIsDeleteMode(!isDeleteMode);
+  };
+
+  const handleToggleImageSelection = (id) => {
+    setSelectedImageIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const handleDeleteSelectedImages = async () => {
+    if (selectedImageIds.length === 0) return;
+    Alert.alert(
+      "Delete images",
+      `Delete ${selectedImageIds.length} image(s)?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const selectedItems = galleryImages.filter((item) =>
+                selectedImageIds.includes(item.id),
+              );
+              const storagePaths = selectedItems
+                .map((item) => {
+                  const url = item.gallery_image_url;
+                  if (!url) return null;
+                  const path =
+                    url.split("places_images/")[1] || url.split("/").pop();
+                  return path;
+                })
+                .filter(Boolean);
+              if (storagePaths.length > 0) {
+                const { error: storageError } = await supabase.storage
+                  .from("places_images")
+                  .remove(storagePaths);
+                if (storageError) {
+                  console.warn("Storage delete warning:", storageError);
+                }
+              }
+              const { error } = await supabase
+                .from("gallery_images")
+                .delete()
+                .in("id", selectedImageIds);
+              if (error) throw error;
+              setSelectedImageIds([]);
+              setIsDeleteMode(false);
+              await loadGalleryImages();
+            } catch (err) {
+              console.error("Delete gallery error:", err);
+              Alert.alert(
+                "Delete failed",
+                err?.message || "Could not delete images.",
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -728,11 +965,6 @@ const VenduDetailsScreen = () => {
     );
   };
 
-  // Placeholder gallery images - replace with actual gallery images from place data
-  const defaultGalleryImages = [
-    // Add placeholder images or fetch from place.gallery_images
-  ];
-
   return (
     <ScrollView
       style={styles.container}
@@ -749,14 +981,24 @@ const VenduDetailsScreen = () => {
 
       {/* Section 1: Banner Image */}
       <View style={styles.section}>
-        <View style={styles.bannerContainer}>
+        <TouchableOpacity
+          style={styles.bannerContainer}
+          onPress={handlePickBannerImage}
+          activeOpacity={0.9}
+        >
           {bannerImage ? (
-            <Image
-              source={{ uri: bannerImage }}
-              style={styles.bannerImage}
-              contentFit="cover"
-              transition={200}
-            />
+            <>
+              <Image
+                source={{ uri: bannerImage }}
+                style={styles.bannerImage}
+                contentFit="cover"
+                transition={200}
+              />
+              <View style={styles.bannerOverlay}>
+                <Ionicons name="camera" size={24} color="#FFFFFF" />
+                <Text style={styles.bannerOverlayText}>Change banner</Text>
+              </View>
+            </>
           ) : (
             <View style={styles.bannerPlaceholder}>
               <Ionicons
@@ -765,14 +1007,63 @@ const VenduDetailsScreen = () => {
                 color={colors.textSecondary}
               />
               <Text style={styles.bannerPlaceholderText}>Banner Image</Text>
-              <TouchableOpacity style={styles.addImageButton}>
+              <View style={styles.addImageButton}>
                 <Ionicons name="add-circle" size={24} color={colors.primary} />
                 <Text style={styles.addImageText}>Add Banner Image</Text>
-              </TouchableOpacity>
+              </View>
             </View>
           )}
-        </View>
+        </TouchableOpacity>
       </View>
+
+      {/* Banner Preview Modal */}
+      <Modal
+        visible={showBannerPreviewModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowBannerPreviewModal(false);
+          setBannerPreviewUri(null);
+          setBannerPreviewBase64(null);
+        }}
+      >
+        <View style={styles.bannerModalOverlay}>
+          <View style={styles.bannerModalContent}>
+            <Text style={styles.bannerModalTitle}>Banner Preview</Text>
+            {bannerPreviewUri && (
+              <Image
+                source={{ uri: bannerPreviewUri }}
+                style={styles.bannerModalPreview}
+                contentFit="contain"
+              />
+            )}
+            <View style={styles.bannerModalActions}>
+              <TouchableOpacity
+                style={styles.bannerModalCancelButton}
+                onPress={() => {
+                  setShowBannerPreviewModal(false);
+                  setBannerPreviewUri(null);
+                  setBannerPreviewBase64(null);
+                }}
+                disabled={isUploadingBanner}
+              >
+                <Text style={styles.bannerModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.bannerModalUploadButton}
+                onPress={handleUploadBannerImage}
+                disabled={isUploadingBanner}
+              >
+                {isUploadingBanner ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.bannerModalUploadText}>Upload</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Section 2: Place Details */}
       <View style={styles.section}>
@@ -951,40 +1242,80 @@ const VenduDetailsScreen = () => {
       <View style={styles.section}>
         <View style={styles.galleryHeader}>
           <Text style={styles.sectionTitle}>Gallery</Text>
-          <TouchableOpacity style={styles.addButton}>
-            <Ionicons
-              name="add-circle-outline"
-              size={20}
-              color={colors.primary}
-            />
-            <Text style={styles.addButtonText}>Add Image</Text>
-          </TouchableOpacity>
+          <View style={styles.galleryHeaderActions}>
+            {galleryImages.length > 0 && (
+              <TouchableOpacity
+                style={[styles.deleteButton, { marginRight: 12 }]}
+                onPress={handleToggleDeleteMode}
+              >
+                <Ionicons
+                  name={isDeleteMode ? "close-circle" : "trash-outline"}
+                  size={22}
+                  color="#FFFFFF"
+                />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={handlePickGalleryImages}
+            >
+              <Ionicons name="add-circle-outline" size={22} color={"#FFFFFF"} />
+            </TouchableOpacity>
+          </View>
         </View>
+        {isDeleteMode && (
+          <View style={styles.deleteBar}>
+            <Text style={styles.deleteBarText}>
+              {selectedImageIds.length > 0
+                ? `${selectedImageIds.length} selected`
+                : "Tap images to select"}
+            </Text>
+            {selectedImageIds.length > 0 && (
+              <TouchableOpacity
+                style={styles.deleteBarButton}
+                onPress={handleDeleteSelectedImages}
+              >
+                <Ionicons name="trash" size={18} color="#FFFFFF" />
+                <Text style={styles.deleteBarButtonText}>Delete</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
         <View style={styles.galleryContainer}>
-          {galleryImages.length > 0 || defaultGalleryImages.length > 0 ? (
+          {galleryImages.length > 0 ? (
             <View style={styles.galleryGrid}>
-              {(galleryImages.length > 0
-                ? galleryImages
-                : defaultGalleryImages
-              ).map((image, index) => (
-                <View key={index} style={styles.galleryItem}>
-                  {typeof image === "string" ? (
-                    <Image
-                      source={{ uri: image }}
-                      style={styles.galleryImage}
-                      contentFit="cover"
-                      transition={200}
-                    />
-                  ) : (
-                    <View style={styles.galleryPlaceholder}>
-                      <Ionicons
-                        name="image-outline"
-                        size={32}
-                        color={colors.textSecondary}
-                      />
+              {galleryImages.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.galleryItem}
+                  onPress={() =>
+                    isDeleteMode
+                      ? handleToggleImageSelection(item.id)
+                      : undefined
+                  }
+                  activeOpacity={isDeleteMode ? 0.7 : 1}
+                  disabled={!isDeleteMode}
+                >
+                  <Image
+                    source={{ uri: item.gallery_image_url }}
+                    style={styles.galleryImage}
+                    contentFit="cover"
+                    transition={200}
+                  />
+                  {isDeleteMode && (
+                    <View
+                      style={[
+                        styles.galleryCheckbox,
+                        selectedImageIds.includes(item.id) &&
+                          styles.galleryCheckboxSelected,
+                      ]}
+                    >
+                      {selectedImageIds.includes(item.id) && (
+                        <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                      )}
                     </View>
                   )}
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           ) : (
@@ -995,7 +1326,10 @@ const VenduDetailsScreen = () => {
                 color={colors.textSecondary}
               />
               <Text style={styles.galleryEmptyText}>No gallery images yet</Text>
-              <TouchableOpacity style={styles.addImageButton}>
+              <TouchableOpacity
+                style={styles.addImageButton}
+                onPress={handlePickGalleryImages}
+              >
                 <Ionicons name="add-circle" size={24} color={colors.primary} />
                 <Text style={styles.addImageText}>Add Images to Gallery</Text>
               </TouchableOpacity>
@@ -1003,6 +1337,65 @@ const VenduDetailsScreen = () => {
           )}
         </View>
       </View>
+
+      {/* Gallery Preview Modal */}
+      <Modal
+        visible={showGalleryPreviewModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowGalleryPreviewModal(false);
+          setGalleryPreviewItems([]);
+        }}
+      >
+        <View style={styles.bannerModalOverlay}>
+          <View style={styles.galleryModalContent}>
+            <Text style={styles.bannerModalTitle}>
+              Gallery Preview ({galleryPreviewItems.length} image
+              {galleryPreviewItems.length !== 1 ? "s" : ""})
+            </Text>
+            <FlatList
+              data={galleryPreviewItems}
+              horizontal
+              keyExtractor={(_, i) => String(i)}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.galleryPreviewList}
+              renderItem={({ item }) => (
+                <View style={styles.galleryPreviewItemWrapper}>
+                  <Image
+                    source={{ uri: item.uri }}
+                    style={styles.galleryPreviewItem}
+                    contentFit="cover"
+                  />
+                </View>
+              )}
+            />
+            <View style={styles.bannerModalActions}>
+              <TouchableOpacity
+                style={styles.bannerModalCancelButton}
+                onPress={() => {
+                  setShowGalleryPreviewModal(false);
+                  setGalleryPreviewItems([]);
+                }}
+                disabled={isUploadingGallery}
+              >
+                <Text style={styles.bannerModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.bannerModalUploadButton}
+                onPress={handleUploadGalleryImages}
+                disabled={isUploadingGallery}
+              >
+                {isUploadingGallery ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.bannerModalUploadText}>Upload</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
@@ -1096,10 +1489,35 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     marginHorizontal: 10,
     borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
   },
   bannerImage: {
     width: "100%",
     height: "100%",
+  },
+  bannerOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 8,
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  bannerOverlayText: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
+    color: "#FFFFFF",
   },
   bannerPlaceholder: {
     flex: 1,
@@ -1129,17 +1547,101 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginLeft: 6,
   },
+  // Banner Preview Modal
+  bannerModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  bannerModalContent: {
+    backgroundColor: colors.cardBackground,
+    borderRadius: 16,
+    padding: 20,
+    width: "100%",
+    maxWidth: 360,
+  },
+  bannerModalTitle: {
+    fontSize: 18,
+    fontFamily: fonts.semiBold,
+    color: colors.text,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  bannerModalPreview: {
+    width: "100%",
+    height: 160,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    marginBottom: 20,
+  },
+  bannerModalActions: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  bannerModalCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  bannerModalCancelText: {
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: colors.textSecondary,
+  },
+  bannerModalUploadButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+  },
+  bannerModalUploadText: {
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: "#FFFFFF",
+  },
+  galleryModalContent: {
+    backgroundColor: colors.cardBackground,
+    borderRadius: 16,
+    padding: 20,
+    width: "100%",
+    maxWidth: 360,
+  },
+  galleryPreviewList: {
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  galleryPreviewItemWrapper: {
+    marginRight: 12,
+  },
+  galleryPreviewItem: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+  },
   // Place Details Section
   detailsCard: {
-    backgroundColor: colors.cardBackground,
     marginHorizontal: 10,
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: colors.cardBackground,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 2,
   },
   detailRow: {
     flexDirection: "row",
@@ -1329,26 +1831,73 @@ const styles = StyleSheet.create({
   },
   // Gallery Section
   galleryContainer: {
-    backgroundColor: colors.cardBackground,
     marginHorizontal: 10,
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: colors.cardBackground,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 2,
   },
   galleryHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 10,
-    marginBottom: 0,
+    marginBottom: 10,
+  },
+  galleryHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   addButton: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: colors.primary,
+    padding: 3,
+    borderRadius: 8,
+  },
+  deleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FF0000",
+    padding: 3,
+    borderRadius: 8,
+  },
+  deleteBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    marginHorizontal: 10,
+    marginBottom: 8,
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+  },
+  deleteBarText: {
+    fontSize: 14,
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
+  },
+  deleteBarButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    backgroundColor: colors.error,
+    borderRadius: 8,
+  },
+  deleteBarButtonText: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
+    color: "#FFFFFF",
   },
   addButtonText: {
     fontSize: 14,
@@ -1362,13 +1911,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   galleryItem: {
-    width: (width - 32) / 3 - 6, // 3 columns: (screen - padding 10*2 + margin 6*2) / 3 - margin
-    height: (width - 32) / 3 - 6,
+    width: (width - 115) / 2, // 2 columns: account for container margin(20) + padding(40) + grid padding(20) + gap(6)
+    height: (width - 115) / 2,
     borderRadius: 8,
     overflow: "hidden",
     backgroundColor: colors.surface,
     marginRight: 6,
     marginBottom: 6,
+    position: "relative",
+  },
+  galleryCheckbox: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  galleryCheckboxSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   galleryImage: {
     width: "100%",

@@ -225,7 +225,8 @@ const HomeScreen = ({
             <View style={styles.chip}>
               <Ionicons name="calendar-outline" size={14} color={colors.text} />
               <Text style={styles.chipText}>
-                Today: {bookingsData?.loading ? "—" : bookingsData?.today || 0}
+                Today's Bookings:{" "}
+                {bookingsData?.loading ? "—" : bookingsData?.today || 0}
               </Text>
             </View>
             <View style={styles.chip}>

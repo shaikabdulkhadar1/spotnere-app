@@ -139,12 +139,9 @@ function AppContent() {
       }
       
       if (!currentUser?.id) {
-        console.log("No user ID found, skipping onboarding check");
         setCheckingOnboarding(false);
         return;
       }
-
-      console.log("Checking onboarding status for user:", currentUser.id, "place_id:", currentUser.place_id);
 
       const { supabase } = require("./config/supabase");
 
@@ -156,8 +153,6 @@ function AppContent() {
           .select("description, website, hours, avg_price, amenities, location_map_link")
           .eq("id", currentUser.place_id)
           .single();
-
-        console.log("Place data:", placeData, "Error:", placeError);
 
         if (placeError) {
           console.error("Error fetching place data:", placeError);
@@ -185,17 +180,13 @@ function AppContent() {
               Array.isArray(placeData.amenities) &&
               placeData.amenities.length > 0);
 
-          console.log("Has place details:", hasPlaceDetails);
-
           if (!hasPlaceDetails) {
-            console.log("Showing place onboarding");
             setShowPlaceOnboarding(true);
             setCheckingOnboarding(false);
             return;
           }
         } else {
           // No place data found, show onboarding
-          console.log("No place data, showing place onboarding");
           setShowPlaceOnboarding(true);
           setCheckingOnboarding(false);
           return;
@@ -203,7 +194,6 @@ function AppContent() {
       } else {
         // No place_id means place wasn't created, but this shouldn't happen
         // Still show place onboarding as fallback
-        console.log("No place_id found, showing place onboarding");
         setShowPlaceOnboarding(true);
         setCheckingOnboarding(false);
         return;
@@ -212,14 +202,11 @@ function AppContent() {
       // Only check bank details if place onboarding is already completed
       // (Bank onboarding will be triggered directly from handlePlaceOnboardingComplete)
       // This check is for users who already have place details but missing bank details
-      console.log("Checking bank details");
       const { data: vendorData, error: vendorError } = await supabase
         .from("vendors")
         .select("account_holder_name, account_number, ifsc_code, upi_id")
         .eq("id", currentUser.id)
         .single();
-
-      console.log("Vendor data:", vendorData, "Error:", vendorError);
 
       if (!vendorError && vendorData) {
         // Check if bank details are filled
@@ -229,10 +216,7 @@ function AppContent() {
           (vendorData.ifsc_code && vendorData.ifsc_code.trim()) ||
           (vendorData.upi_id && vendorData.upi_id.trim());
 
-        console.log("Has bank details:", hasBankDetails);
-
         if (!hasBankDetails) {
-          console.log("Showing bank onboarding");
           setShowBankOnboarding(true);
         }
       } else if (vendorError) {
@@ -246,19 +230,15 @@ function AppContent() {
   };
 
   const handlePlaceOnboardingComplete = async () => {
-    console.log("handlePlaceOnboardingComplete called");
-    
     // Refresh data to get updated place details
     await refreshData();
     
     // Immediately show bank onboarding for new users
     // (This is called after place onboarding, so user is definitely new)
-    console.log("Place onboarding complete, showing bank onboarding");
     setShowPlaceOnboarding(false);
     
     // Use setTimeout to ensure state update happens after render cycle
     setTimeout(() => {
-      console.log("Setting showBankOnboarding to true");
       setShowBankOnboarding(true);
     }, 100);
   };
@@ -280,7 +260,6 @@ function AppContent() {
 
   const handleBack = () => {
     // Handle back navigation if needed
-    console.log("Back pressed");
   };
 
   const handleNavigateToBookings = () => {

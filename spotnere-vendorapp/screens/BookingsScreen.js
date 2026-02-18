@@ -187,7 +187,7 @@ const BookingsScreen = () => {
               </View>
             )}
             {isUpcoming && !isToday && (
-              <View style={styles.statusBadge}>
+              <View style={[styles.statusBadge, styles.statusBadgeUpcoming]}>
                 <Text style={styles.statusBadgeText}>Upcoming</Text>
               </View>
             )}
@@ -301,14 +301,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: colors.cardBackground,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 2,
   },
   bookingItemLeft: {
     flexDirection: "row",
@@ -326,12 +328,18 @@ const styles = StyleSheet.create({
   },
   bookingIconUpcoming: {
     backgroundColor: `${colors.success}15`,
+    borderColor: colors.success,
+    borderWidth: 1,
   },
   bookingIconPast: {
     backgroundColor: `${colors.textSecondary}15`,
+    borderColor: colors.textSecondary,
+    borderWidth: 1,
   },
   bookingIconToday: {
     backgroundColor: `${colors.primary}15`,
+    borderColor: colors.primary,
+    borderWidth: 1,
   },
   bookingDetails: {
     flex: 1,
@@ -356,11 +364,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 4,
   },
+  statusBadgeUpcoming: {
+    backgroundColor: `${colors.success}15`,
+    borderColor: colors.success,
+    borderWidth: 1,
+  },
   statusBadgePast: {
     backgroundColor: `${colors.textSecondary}15`,
+    borderColor: colors.textSecondary,
+    borderWidth: 1,
   },
   statusBadgeToday: {
     backgroundColor: `${colors.primary}15`,
+    borderColor: colors.primary,
+    borderWidth: 1,
   },
   statusBadgeText: {
     fontSize: 13,
