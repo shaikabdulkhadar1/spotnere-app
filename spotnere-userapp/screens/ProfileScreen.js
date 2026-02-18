@@ -172,7 +172,6 @@ const ProfileScreen = ({ onLoginSuccess, onBack, onTripPress }) => {
         break;
       case "notifications":
         // TODO: Implement notifications screen
-        console.log("Notifications clicked");
         break;
       case "language":
         Alert.alert(
@@ -197,7 +196,7 @@ const ProfileScreen = ({ onLoginSuccess, onBack, onTripPress }) => {
         setShowPastBookings(true);
         break;
       default:
-        console.log(`Menu item clicked: ${itemId}`);
+        break;
     }
   };
 

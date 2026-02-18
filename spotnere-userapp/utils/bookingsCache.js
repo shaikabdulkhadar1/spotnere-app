@@ -35,12 +35,10 @@ export const getCachedBookings = async (userId) => {
       const cacheAge = now - bookingsCache.timestamp;
 
       if (cacheAge > CACHE_EXPIRY_MS) {
-        console.log("📦 Bookings cache expired, clearing...");
         clearBookingsCache(userId);
         return null;
       }
 
-      console.log("📦 Using in-memory cached bookings");
       return bookingsCache.bookings;
     }
 
@@ -54,7 +52,6 @@ export const getCachedBookings = async (userId) => {
       const cacheAge = now - cached.timestamp;
 
       if (cacheAge > CACHE_EXPIRY_MS) {
-        console.log("📦 Bookings cache expired, clearing...");
         await AsyncStorage.removeItem(cacheKey);
         return null;
       }
@@ -65,7 +62,6 @@ export const getCachedBookings = async (userId) => {
         timestamp: cached.timestamp,
       };
 
-      console.log("📦 Using AsyncStorage cached bookings");
       return cached.bookings;
     }
 
@@ -102,7 +98,6 @@ export const setCachedBookings = async (bookings, userId) => {
       timestamp: timestamp,
     };
     await AsyncStorage.setItem(cacheKey, JSON.stringify(cacheData));
-    console.log(`📦 Cached ${bookings.length} bookings`);
   } catch (error) {
     console.error("Error saving bookings cache:", error);
   }
@@ -125,7 +120,6 @@ export const clearBookingsCache = async (userId) => {
         key.startsWith(BOOKINGS_CACHE_KEY)
       );
       await AsyncStorage.multiRemove(cacheKeys);
-      console.log("📦 Cleared all bookings caches");
     } catch (error) {
       console.error("Error clearing bookings cache:", error);
     }
@@ -141,7 +135,6 @@ export const clearBookingsCache = async (userId) => {
   try {
     const cacheKey = `${BOOKINGS_CACHE_KEY}_${userId}`;
     await AsyncStorage.removeItem(cacheKey);
-    console.log(`📦 Cleared bookings cache for user ${userId}`);
   } catch (error) {
     console.error("Error clearing bookings cache:", error);
   }

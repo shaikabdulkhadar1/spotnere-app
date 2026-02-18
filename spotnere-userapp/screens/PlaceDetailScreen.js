@@ -15,6 +15,7 @@ import {
   Text,
   View,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   Dimensions,
   ActivityIndicator,
@@ -53,6 +54,7 @@ const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 const PlaceDetailScreen = ({ placeId, onClose }) => {
   const [placeDetails, setPlaceDetails] = useState(null);
   const [reviews, setReviews] = useState([]);
+  const [galleryImages, setGalleryImages] = useState([]);
   const [vendor, setVendor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -66,12 +68,15 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const reviewsScrollRef = useRef(null);
+  const heroCarouselRef = useRef(null);
   const [scrollX, setScrollX] = useState(0);
+  const [heroScrollX, setHeroScrollX] = useState(0);
 
   useEffect(() => {
     if (placeId) {
       fetchPlaceDetails();
       fetchReviews();
+      fetchGalleryImages();
       fetchVendorDetails();
       checkFavoriteStatus();
     }
@@ -221,6 +226,24 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
     }
   };
 
+  const fetchGalleryImages = async () => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from("gallery_images")
+        .select("id, gallery_image_url")
+        .eq("place_id", placeId)
+        .order("created_at", { ascending: true });
+
+      if (fetchError) {
+        setGalleryImages([]);
+        return;
+      }
+      setGalleryImages(data || []);
+    } catch (err) {
+      setGalleryImages([]);
+    }
+  };
+
   const fetchVendorDetails = async () => {
     try {
       const { data, error: fetchError } = await supabase
@@ -302,7 +325,10 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
 
       // Update places.rating with new average
       const roundedAvg = Math.round(avgRating * 10) / 10;
-      await supabase.from("places").update({ rating: roundedAvg }).eq("id", placeId);
+      await supabase
+        .from("places")
+        .update({ rating: roundedAvg })
+        .eq("id", placeId);
 
       setShowAddReviewModal(false);
       setAddReviewText("");
@@ -389,6 +415,14 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
     placeDetails.image ||
     placeDetails.photo_url ||
     "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=1200&h=900&fit=crop";
+
+  const heroCarouselImages = [
+    imageUri,
+    ...galleryImages.map((g) => g.gallery_image_url),
+  ];
+
+  const heroPageIndex = Math.round(heroScrollX / width);
+  const heroDotsCount = heroCarouselImages.length;
 
   const placeName =
     placeDetails.title ||
@@ -545,17 +579,37 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* HERO */}
+        {/* HERO — Image carousel (banner + gallery) */}
         <View style={styles.hero}>
-          <ExpoImage
-            source={{ uri: imageUri }}
-            style={styles.heroImg}
-            contentFit="cover"
-            placeholder={{ blurhash: "L6PZfSi_.AyE_3t7t7R**0o#DgR4" }}
+          <FlatList
+            ref={heroCarouselRef}
+            data={heroCarouselImages}
+            keyExtractor={(_, i) => `hero-${i}`}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={(e) =>
+              setHeroScrollX(e.nativeEvent.contentOffset.x)
+            }
+            scrollEventThrottle={16}
+            getItemLayout={(_, index) => ({
+              length: width,
+              offset: width * index,
+              index,
+            })}
+            renderItem={({ item }) => (
+              <View style={styles.heroSlide}>
+                <ExpoImage
+                  source={{ uri: item }}
+                  style={styles.heroImg}
+                  contentFit="cover"
+                  placeholder={{ blurhash: "L6PZfSi_.AyE_3t7t7R**0o#DgR4" }}
+                />
+              </View>
+            )}
           />
 
           {/* Overlay gradients */}
-
           <LinearGradient
             colors={[
               "transparent",
@@ -566,6 +620,66 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
             locations={[0, 0.35, 0.7, 1]}
             style={styles.heroBottomFade}
           />
+
+          {/* Carousel arrows */}
+          {heroDotsCount > 1 ? (
+            <>
+              <TouchableOpacity
+                style={[styles.heroArrow, styles.heroArrowLeft]}
+                onPress={() => {
+                  if (heroPageIndex > 0) {
+                    heroCarouselRef.current?.scrollToIndex({
+                      index: heroPageIndex - 1,
+                      animated: true,
+                    });
+                  }
+                }}
+                disabled={heroPageIndex === 0}
+                activeOpacity={0.85}
+              >
+                <BlurView
+                  intensity={75}
+                  tint="light"
+                  style={styles.heroArrowBlur}
+                >
+                  <Ionicons
+                    name="chevron-back"
+                    size={24}
+                    color={heroPageIndex === 0 ? "rgba(0,0,0,0.3)" : "#000"}
+                  />
+                </BlurView>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.heroArrow, styles.heroArrowRight]}
+                onPress={() => {
+                  if (heroPageIndex < heroDotsCount - 1) {
+                    heroCarouselRef.current?.scrollToIndex({
+                      index: heroPageIndex + 1,
+                      animated: true,
+                    });
+                  }
+                }}
+                disabled={heroPageIndex === heroDotsCount - 1}
+                activeOpacity={0.85}
+              >
+                <BlurView
+                  intensity={75}
+                  tint="light"
+                  style={styles.heroArrowBlur}
+                >
+                  <Ionicons
+                    name="chevron-forward"
+                    size={24}
+                    color={
+                      heroPageIndex === heroDotsCount - 1
+                        ? "rgba(0,0,0,0.3)"
+                        : "#000"
+                    }
+                  />
+                </BlurView>
+              </TouchableOpacity>
+            </>
+          ) : null}
 
           {/* Top controls */}
           <View style={styles.heroTopBar}>
@@ -1251,7 +1365,33 @@ const styles = StyleSheet.create({
     position: "relative",
     backgroundColor: colors.surface,
   },
+  heroSlide: {
+    width,
+    height: height * 0.44,
+  },
   heroImg: { width: "100%", height: "100%" },
+  heroArrow: {
+    position: "absolute",
+    top: "50%",
+    marginTop: -22,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: "hidden",
+    zIndex: 9,
+  },
+  heroArrowLeft: {
+    left: 12,
+  },
+  heroArrowRight: {
+    right: 12,
+  },
+  heroArrowBlur: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 22,
+  },
   heroShade: {
     position: "absolute",
     top: 0,

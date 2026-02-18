@@ -40,20 +40,15 @@ export const getCachedFavorites = async (userId, country = null) => {
 
       // Check if cache is expired
       if (cacheAge > CACHE_EXPIRY_MS) {
-        console.log("📦 Favorites cache expired, clearing...");
         clearCache(userId);
         return null;
       }
 
       // If country is specified, check if it matches cached country
       if (country && favoritesCache.country !== country) {
-        console.log(
-          `📦 Favorites cache country mismatch (cached: ${favoritesCache.country}, requested: ${country})`
-        );
         return null;
       }
 
-      console.log("📦 Using in-memory cached favorites");
       return favoritesCache.places;
     }
 
@@ -68,16 +63,12 @@ export const getCachedFavorites = async (userId, country = null) => {
 
       // Check if cache is expired
       if (cacheAge > CACHE_EXPIRY_MS) {
-        console.log("📦 Favorites cache expired, clearing...");
         await AsyncStorage.removeItem(cacheKey);
         return null;
       }
 
       // If country is specified, check if it matches cached country
       if (country && cached.country !== country) {
-        console.log(
-          `📦 Favorites cache country mismatch (cached: ${cached.country}, requested: ${country})`
-        );
         return null;
       }
 
@@ -89,7 +80,6 @@ export const getCachedFavorites = async (userId, country = null) => {
         timestamp: cached.timestamp,
       };
 
-      console.log("📦 Using AsyncStorage cached favorites");
       return cached.places;
     }
 
@@ -131,9 +121,6 @@ export const setCachedFavorites = async (places, userId, country = null) => {
       timestamp: timestamp,
     };
     await AsyncStorage.setItem(cacheKey, JSON.stringify(cacheData));
-    console.log(
-      `📦 Cached ${places.length} favorites${country ? ` for ${country}` : ""}`
-    );
   } catch (error) {
     console.error("Error saving favorites cache:", error);
     // Continue with in-memory cache even if AsyncStorage fails
@@ -159,7 +146,6 @@ export const clearFavoritesCache = async (userId) => {
         key.startsWith(FAVORITES_CACHE_KEY)
       );
       await AsyncStorage.multiRemove(cacheKeys);
-      console.log("📦 Cleared all favorites caches");
     } catch (error) {
       console.error("Error clearing favorites cache:", error);
     }
@@ -177,7 +163,6 @@ export const clearFavoritesCache = async (userId) => {
   try {
     const cacheKey = `${FAVORITES_CACHE_KEY}_${userId}`;
     await AsyncStorage.removeItem(cacheKey);
-    console.log(`📦 Cleared favorites cache for user ${userId}`);
   } catch (error) {
     console.error("Error clearing favorites cache:", error);
   }

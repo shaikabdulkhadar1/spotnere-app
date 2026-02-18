@@ -314,7 +314,6 @@ export default function App() {
   useEffect(() => {
     // Only fetch once on initial app load
     if (hasInitialFetchCompleted.current) {
-      console.log("📦 App already initialized, skipping fetch");
       return;
     }
 
@@ -335,7 +334,6 @@ export default function App() {
   const getLocationAndSetCountry = async () => {
     // Prevent multiple fetches - only fetch once on initial load
     if (hasInitialFetchCompleted.current) {
-      console.log("📦 Initial fetch already completed, will not fetch again");
       return;
     }
 
@@ -389,9 +387,6 @@ export default function App() {
         const country = geocode[0].country;
         const cityName = geocode[0].city || geocode[0].subAdministrativeArea;
 
-        console.log("📍 Extracted Location Information:");
-        console.log("Country:", country);
-        console.log("City:", cityName);
 
         setUserCountry(country);
         if (cityName) {
@@ -510,7 +505,14 @@ export default function App() {
                         styles.categoryItem,
                         isActive && styles.categoryItemActive,
                       ]}
-                      onPress={() => setActiveCategory(category.id)}
+                      onPress={() => {
+                        setActiveCategory(category.id);
+                        setAppliedFilters((prev) => ({
+                          ...prev,
+                          category: category.id,
+                          subCategory: "", // Reset sub-category when changing main category
+                        }));
+                      }}
                     >
                       <View style={styles.categoryIconContainer}>
                         {category.image ? (
@@ -594,7 +596,6 @@ export default function App() {
               <ProfileScreen
                 onLoginSuccess={(userData) => {
                   // Handle successful login - user data is stored in auth utility
-                  console.log("User logged in:", userData);
                 }}
                 onBack={() => setActiveTab("home")}
                 onTripPress={setSelectedBooking}
@@ -673,7 +674,6 @@ export default function App() {
                               ]}
                               onPress={() => {
                                 setSelectedSortBy("distance");
-                                console.log("Sort by: Distance");
                               }}
                             >
                               <Text
@@ -694,7 +694,6 @@ export default function App() {
                               ]}
                               onPress={() => {
                                 setSelectedSortBy("price");
-                                console.log("Sort by: Price");
                               }}
                             >
                               <Text
@@ -715,7 +714,6 @@ export default function App() {
                               ]}
                               onPress={() => {
                                 setSelectedSortBy("rating");
-                                console.log("Sort by: Rating");
                               }}
                             >
                               <Text
@@ -778,7 +776,6 @@ export default function App() {
                                       setSelectedCategory(category.id);
                                       setSelectedSubCategory(""); // Reset sub-category when category changes
                                       setShowCategoryDropdown(false);
-                                      console.log("Category:", category.id);
                                     }}
                                   >
                                     <Text
@@ -879,7 +876,6 @@ export default function App() {
                                         onPress={() => {
                                           setSelectedSubCategory(subCat);
                                           setShowSubCategoryDropdown(false);
-                                          console.log("Sub-category:", subCat);
                                         }}
                                       >
                                         <Text
@@ -932,7 +928,6 @@ export default function App() {
                                   ]}
                                   onPress={() => {
                                     setSelectedRating(rating);
-                                    console.log(`Rating filter: ${rating}`);
                                   }}
                                 >
                                   <View
@@ -985,7 +980,6 @@ export default function App() {
                           // Update active category to "All"
                           setActiveCategory("All");
 
-                          console.log("Filters reset");
 
                           // Close modal
                           Animated.spring(slideAnim, {
@@ -1016,7 +1010,6 @@ export default function App() {
                             setActiveCategory(selectedCategory);
                           }
 
-                          console.log("Applying filters:", newFilters);
 
                           // Close modal
                           Animated.spring(slideAnim, {

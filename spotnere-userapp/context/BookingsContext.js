@@ -174,7 +174,6 @@ export const BookingsProvider = ({ children }) => {
       setBookings(fetched);
       setLastFetchedUserId(user.id);
       await setCachedBookings(fetched, user.id);
-      console.log(`✈️ Fetched ${fetched.length} bookings`);
     } catch (err) {
       console.error("Error fetching bookings:", err);
       setError(err.message || "Failed to load bookings");

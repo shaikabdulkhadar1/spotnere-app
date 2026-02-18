@@ -39,7 +39,6 @@ const ReelsScreen = ({ userCountry, onPlacePress, onBack }) => {
       const reelIds = await getReels();
 
       if (!reelIds || reelIds.length === 0) {
-        console.log("🎬 No reels found");
         setReels([]);
         setLoading(false);
         return;
@@ -64,8 +63,6 @@ const ReelsScreen = ({ userCountry, onPlacePress, onBack }) => {
         console.error("❌ Error fetching reels:", fetchError);
         throw new Error(`Failed to fetch reels: ${fetchError.message}`);
       }
-
-      console.log(`🎬 Found ${places?.length || 0} reels`);
 
       if (!places || places.length === 0) {
         setReels([]);

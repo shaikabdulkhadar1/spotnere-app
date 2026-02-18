@@ -163,13 +163,7 @@ const HomeScreen = ({
         throw new Error(`Failed to fetch places: ${fetchError.message}`);
       }
 
-      console.log(
-        `📊 Total places found${userCountry ? ` in ${userCountry}` : ""}:`,
-        allPlaces?.length || 0
-      );
-
       if (!allPlaces || allPlaces.length === 0) {
-        console.warn("⚠️ No places found");
         setAllPlacesData([]);
         setLoading(false);
         return;
@@ -204,9 +198,6 @@ const HomeScreen = ({
           const selectedCategory = categoryFilter.toLowerCase();
           return placeCategory === selectedCategory;
         });
-        console.log(
-          `🔍 Filtered by category "${categoryFilter}": ${filteredPlaces.length} places`
-        );
       }
 
       // Filter by sub-category if provided
@@ -216,9 +207,6 @@ const HomeScreen = ({
           const selectedSubCategory = filters.subCategory.toLowerCase();
           return placeSubCategory === selectedSubCategory;
         });
-        console.log(
-          `🔍 Filtered by sub-category "${filters.subCategory}": ${filteredPlaces.length} places`
-        );
       }
 
       // Filter by rating if provided
@@ -226,9 +214,6 @@ const HomeScreen = ({
         filteredPlaces = filteredPlaces.filter((place) => {
           return place.rating >= filters.rating;
         });
-        console.log(
-          `🔍 Filtered by rating "${filters.rating}+": ${filteredPlaces.length} places`
-        );
       }
 
       // Sort places based on sortBy filter
@@ -249,13 +234,6 @@ const HomeScreen = ({
         showBadge: index < 3, // Show badge on first 3 cards
       }));
 
-      console.log(
-        `✅ Selected top ${formatted.length} places by rating${
-          activeCategory && activeCategory !== "All"
-            ? ` (Category: ${activeCategory})`
-            : ""
-        }`
-      );
       setAllPlacesData(sortedPlaces);
       setDisplayedCount(TOP_K);
     } catch (err) {

@@ -48,7 +48,6 @@ const FavoriteScreen = ({ userCountry, onPlacePress, onBack }) => {
       // Get current user
       const user = await getCurrentUser();
       if (!user || !user.id) {
-        console.log("📌 User not logged in");
         setFavoritePlaces([]);
         setLoading(false);
         return;
@@ -76,7 +75,6 @@ const FavoriteScreen = ({ userCountry, onPlacePress, onBack }) => {
       }
 
       if (!userPlaces || userPlaces.length === 0) {
-        console.log("📌 No favorites found in database");
         setFavoritePlaces([]);
         // Cache empty result
         await setCachedFavorites([], user.id, userCountry);
@@ -101,8 +99,6 @@ const FavoriteScreen = ({ userCountry, onPlacePress, onBack }) => {
         console.error("❌ Error fetching favorite places:", fetchError);
         throw new Error(`Failed to fetch favorites: ${fetchError.message}`);
       }
-
-      console.log(`❤️ Found ${places?.length || 0} favorite places`);
 
       if (!places || places.length === 0) {
         setFavoritePlaces([]);
