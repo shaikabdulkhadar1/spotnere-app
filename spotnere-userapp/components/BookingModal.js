@@ -51,19 +51,202 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
     }
   }, [visible]);
 
-  // Available time slots
-  const timeSlots = [
-    "9:00 AM",
-    "10:00 AM",
-    "11:00 AM",
-    "12:00 PM",
-    "1:00 PM",
-    "2:00 PM",
-    "3:00 PM",
-    "4:00 PM",
-    "5:00 PM",
-    "6:00 PM",
-  ];
+  // Parse time string (e.g. "9:00 AM", "10:30 PM", "09:00", "21:00") to minutes since midnight
+  const parseTimeToMinutes = (str) => {
+    if (!str || typeof str !== "string") return 0;
+    const s = str.trim().toUpperCase();
+    const match = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/);
+    if (!match) return 0;
+    let h = parseInt(match[1], 10);
+    const m = parseInt(match[2] || "0", 10);
+    const period = match[3];
+    if (period) {
+      if (period === "PM" && h !== 12) h += 12;
+      if (period === "AM" && h === 12) h = 0;
+    }
+    // No period = 24-hour format (09:00 = 9 AM, 21:00 = 9 PM)
+    return Math.min(24 * 60 - 1, Math.max(0, h * 60 + m));
+  };
+
+  // Convert minutes since midnight to "9:00 AM" format
+  const minutesToTimeStr = (mins) => {
+    const h = Math.floor(mins / 60) % 24;
+    const m = mins % 60;
+    const period = h >= 12 ? "PM" : "AM";
+    const hour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `${hour}:${String(m).padStart(2, "0")} ${period}`;
+  };
+
+  // Parse opening hours and return set of closed day indices (0=Sun, 1=Mon, ..., 6=Sat)
+  const getClosedDayIndices = () => {
+    const closed = new Set();
+    const dayNameToIndex = {
+      Sunday: 0,
+      Monday: 1,
+      Tuesday: 2,
+      Wednesday: 3,
+      Thursday: 4,
+      Friday: 5,
+      Saturday: 6,
+    };
+    let hours = null;
+    const place = placeDetails || {};
+    if (place.opening_hours_json) {
+      try {
+        hours =
+          typeof place.opening_hours_json === "string"
+            ? JSON.parse(place.opening_hours_json)
+            : place.opening_hours_json;
+      } catch {}
+    } else if (place.opening_hours) {
+      try {
+        hours =
+          typeof place.opening_hours === "string"
+            ? JSON.parse(place.opening_hours)
+            : place.opening_hours;
+      } catch {}
+    } else if (place.hours) {
+      try {
+        hours =
+          typeof place.hours === "string" ? JSON.parse(place.hours) : place.hours;
+      } catch {
+        hours = place.hours;
+      }
+    }
+    if (!hours || typeof hours !== "object") return closed;
+    const dayNames = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
+    for (let i = 0; i < dayNames.length; i++) {
+      const dayName = dayNames[i];
+      const raw =
+        hours[dayName] ||
+        hours[dayName.toLowerCase()] ||
+        hours[i];
+      let isClosed = !raw;
+      if (raw) {
+        if (typeof raw === "string") {
+          isClosed = raw.trim().toLowerCase() === "closed";
+        } else if (typeof raw === "object") {
+          const closeVal = String(raw.close || "").toLowerCase();
+          const openVal = String(raw.open || "").toLowerCase();
+          isClosed =
+            raw.close === null ||
+            raw.close === false ||
+            closeVal === "closed" ||
+            openVal === "closed" ||
+            (!raw.open && !raw.close);
+        } else if (Array.isArray(raw)) {
+          isClosed = raw.length === 0;
+        }
+      }
+      if (isClosed) closed.add(i);
+    }
+    return closed;
+  };
+
+  const closedDayIndices = getClosedDayIndices();
+
+  // Get open/close times for a day index (0=Sun, 1=Mon, ...). Returns { openMins, closeMins } or null if closed.
+  const getHoursForDay = (dayIndex) => {
+    let hours = null;
+    const place = placeDetails || {};
+    if (place.opening_hours_json) {
+      try {
+        hours =
+          typeof place.opening_hours_json === "string"
+            ? JSON.parse(place.opening_hours_json)
+            : place.opening_hours_json;
+      } catch {}
+    } else if (place.opening_hours) {
+      try {
+        hours =
+          typeof place.opening_hours === "string"
+            ? JSON.parse(place.opening_hours)
+            : place.opening_hours;
+      } catch {}
+    } else if (place.hours) {
+      try {
+        hours =
+          typeof place.hours === "string" ? JSON.parse(place.hours) : place.hours;
+      } catch {
+        hours = place.hours;
+      }
+    }
+    if (!hours || typeof hours !== "object") return null;
+    const dayNames = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
+    const raw =
+      hours[dayNames[dayIndex]] ||
+      hours[dayNames[dayIndex].toLowerCase()] ||
+      hours[dayIndex];
+    if (!raw) return null;
+    let openStr = null;
+    let closeStr = null;
+    if (typeof raw === "string") {
+      if (raw.trim().toLowerCase() === "closed") return null;
+      const parts = raw.split("-").map((p) => p.trim());
+      if (parts.length >= 2) {
+        openStr = parts[0];
+        closeStr = parts[1];
+      }
+    } else if (typeof raw === "object" && !Array.isArray(raw)) {
+      const openVal = raw.open;
+      const closeVal = raw.close;
+      if (
+        !openVal ||
+        !closeVal ||
+        String(openVal).toLowerCase() === "closed" ||
+        String(closeVal).toLowerCase() === "closed"
+      )
+        return null;
+      openStr = String(openVal);
+      closeStr = String(closeVal);
+    } else if (Array.isArray(raw) && raw.length >= 2) {
+      openStr = String(raw[0]);
+      closeStr = String(raw[1]);
+    }
+    if (!openStr || !closeStr) return null;
+    const openMins = parseTimeToMinutes(openStr);
+    const closeMins = parseTimeToMinutes(closeStr);
+    if (closeMins <= openMins) return null; // invalid range
+    return { openMins, closeMins };
+  };
+
+  // Generate 30-min slots between open and close for the selected date
+  const SLOT_INTERVAL = 30;
+  const DEFAULT_OPEN = 9 * 60; // 9:00 AM
+  const DEFAULT_CLOSE = 22 * 60; // 10:00 PM
+  const getTimeSlotsForSelectedDate = () => {
+    if (!selectedDate) return [];
+    const dayIndex = selectedDate.getDay();
+    if (closedDayIndices?.has(dayIndex)) return [];
+    let range = getHoursForDay(dayIndex);
+    if (!range) {
+      // No hours data: use default 9 AM - 10 PM
+      range = { openMins: DEFAULT_OPEN, closeMins: DEFAULT_CLOSE };
+    }
+    const slots = [];
+    for (let m = range.openMins; m < range.closeMins; m += SLOT_INTERVAL) {
+      slots.push(minutesToTimeStr(m));
+    }
+    return slots;
+  };
+
+  const timeSlots = getTimeSlotsForSelectedDate();
 
   const getDaysInMonth = (date) => {
     const year = date.getFullYear();
@@ -100,8 +283,13 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
     return date < today;
   };
 
+  const isDateClosed = (date) => {
+    if (!date) return false;
+    return closedDayIndices?.has(date.getDay()) ?? false;
+  };
+
   const handleDatePress = (date) => {
-    if (!date || isPastDate(date)) return;
+    if (!date || isPastDate(date) || isDateClosed(date)) return;
     setSelectedDate(date);
     setSelectedTimeSlot(null); // Reset time slot when date changes
     setGuests(""); // Reset guests when date changes
@@ -139,7 +327,7 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
     // Since we only have single date selection, assume 1 night
     const nights = 1;
     const subtotal = parseFloat(basePrice) * nights * numGuests;
-    const serviceFee = subtotal * 0.1; // 10% service fee
+    const serviceFee = subtotal * 0; // 10% service fee
     const total = subtotal + serviceFee;
 
     return { subtotal, serviceFee, total };
@@ -183,19 +371,10 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
 
       // Combine date + time slot into ISO datetime (e.g. "2025-01-27T10:00:00")
       const dateStr = selectedDate.toISOString().split("T")[0];
-      const timeMap = {
-        "9:00 AM": "09:00",
-        "10:00 AM": "10:00",
-        "11:00 AM": "11:00",
-        "12:00 PM": "12:00",
-        "1:00 PM": "13:00",
-        "2:00 PM": "14:00",
-        "3:00 PM": "15:00",
-        "4:00 PM": "16:00",
-        "5:00 PM": "17:00",
-        "6:00 PM": "18:00",
-      };
-      const timeStr = timeMap[selectedTimeSlot] || "10:00";
+      const mins = parseTimeToMinutes(selectedTimeSlot);
+      const h = Math.floor(mins / 60) % 24;
+      const m = mins % 60;
+      const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
       const bookingDateTime = `${dateStr}T${timeStr}:00.000Z`;
 
       const numberOfGuests = parseInt(guests, 10) || 0;
@@ -264,10 +443,11 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
           setShowPaymentCancelled(true);
           return;
         }
-        const msg =
-          razorpayErr?.message?.includes("null")
-            ? "Razorpay native module not loaded. Rebuild the app with: npx expo prebuild --clean && npx expo run:android --device"
-            : err?.description || razorpayErr?.description || "Payment cancelled or failed.";
+        const msg = razorpayErr?.message?.includes("null")
+          ? "Razorpay native module not loaded. Rebuild the app with: npx expo prebuild --clean && npx expo run:android --device"
+          : err?.description ||
+            razorpayErr?.description ||
+            "Payment cancelled or failed.";
         throw new Error(msg);
       }
 
@@ -403,229 +583,240 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
             </View>
           </TouchableOpacity>
         ) : (
-        <BlurContainer {...blurProps} style={styles.blurOverlay}>
-          <View style={styles.modalContainer}>
-            {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.headerTitle}>Book your stay</Text>
-              <TouchableOpacity
-                onPress={onClose}
-                style={styles.closeButton}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Scrollable Content */}
-            <ScrollView
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={true}
-            >
-              {/* Calendar */}
-              <View style={styles.calendarContainer}>
-                {/* Month Navigation */}
-                <View style={styles.monthHeader}>
-                  <TouchableOpacity
-                    onPress={() => navigateMonth(-1)}
-                    style={styles.monthNavButton}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name="chevron-back"
-                      size={20}
-                      color={colors.text}
-                    />
-                  </TouchableOpacity>
-                  <Text style={styles.monthYearText}>
-                    {formatMonthYear(currentMonth)}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => navigateMonth(1)}
-                    style={styles.monthNavButton}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name="chevron-forward"
-                      size={20}
-                      color={colors.text}
-                    />
-                  </TouchableOpacity>
-                </View>
-
-                {/* Week Days Header */}
-                <View style={styles.weekDaysContainer}>
-                  {weekDays.map((day, index) => (
-                    <View key={index} style={styles.weekDay}>
-                      <Text style={styles.weekDayText}>{day}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                {/* Calendar Grid */}
-                <View style={styles.calendarGrid}>
-                  {days.map((date, index) => {
-                    if (!date) {
-                      return <View key={index} style={styles.dayCell} />;
-                    }
-
-                    const isSelected = isDateSelected(date);
-                    const isPast = isPastDate(date);
-
-                    return (
-                      <TouchableOpacity
-                        key={index}
-                        style={[
-                          styles.dayCell,
-                          isSelected && styles.dayCellSelected,
-                          isPast && styles.dayCellPast,
-                        ]}
-                        onPress={() => handleDatePress(date)}
-                        disabled={isPast}
-                        activeOpacity={0.7}
-                      >
-                        <Text
-                          style={[
-                            styles.dayText,
-                            isSelected && styles.dayTextSelected,
-                            isPast && styles.dayTextPast,
-                          ]}
-                        >
-                          {date.getDate()}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+          <BlurContainer {...blurProps} style={styles.blurOverlay}>
+            <View style={styles.modalContainer}>
+              {/* Header */}
+              <View style={styles.header}>
+                <Text style={styles.headerTitle}>Book your stay</Text>
+                <TouchableOpacity
+                  onPress={onClose}
+                  style={styles.closeButton}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="close" size={24} color={colors.text} />
+                </TouchableOpacity>
               </View>
 
-              {/* Time Slot Selection - Always visible but grayed out until date is selected */}
-              <View style={styles.timeSlotContainer}>
-                <Text
-                  style={[
-                    styles.timeSlotTitle,
-                    !selectedDate && styles.timeSlotTitleDisabled,
-                  ]}
-                >
-                  Select time
-                </Text>
-                <View style={styles.timeSlotGrid}>
-                  {timeSlots.map((timeSlot, index) => {
-                    const isSelected = selectedTimeSlot === timeSlot;
-                    const isDisabled = !selectedDate;
-                    return (
-                      <TouchableOpacity
-                        key={index}
-                        style={[
-                          styles.timeSlotButton,
-                          isSelected && styles.timeSlotButtonSelected,
-                          !isDisabled &&
-                            !isSelected &&
-                            styles.timeSlotButtonEnabled,
-                          isDisabled && styles.timeSlotButtonDisabled,
-                        ]}
-                        onPress={() => handleTimeSlotPress(timeSlot)}
-                        disabled={isDisabled}
-                        activeOpacity={0.7}
-                      >
-                        <Text
+              {/* Scrollable Content */}
+              <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={true}
+              >
+                {/* Calendar */}
+                <View style={styles.calendarContainer}>
+                  {/* Month Navigation */}
+                  <View style={styles.monthHeader}>
+                    <TouchableOpacity
+                      onPress={() => navigateMonth(-1)}
+                      style={styles.monthNavButton}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name="chevron-back"
+                        size={20}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+                    <Text style={styles.monthYearText}>
+                      {formatMonthYear(currentMonth)}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => navigateMonth(1)}
+                      style={styles.monthNavButton}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name="chevron-forward"
+                        size={20}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Week Days Header */}
+                  <View style={styles.weekDaysContainer}>
+                    {weekDays.map((day, index) => (
+                      <View key={index} style={styles.weekDay}>
+                        <Text style={styles.weekDayText}>{day}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Calendar Grid */}
+                  <View style={styles.calendarGrid}>
+                    {days.map((date, index) => {
+                      if (!date) {
+                        return <View key={index} style={styles.dayCell} />;
+                      }
+
+                      const isSelected = isDateSelected(date);
+                      const isPast = isPastDate(date);
+                      const isClosed = isDateClosed(date);
+
+                      return (
+                        <TouchableOpacity
+                          key={index}
                           style={[
-                            styles.timeSlotText,
-                            isSelected && styles.timeSlotTextSelected,
+                            styles.dayCell,
+                            isSelected && styles.dayCellSelected,
+                            isPast && styles.dayCellPast,
+                            isClosed && styles.dayCellClosed,
+                          ]}
+                          onPress={() => handleDatePress(date)}
+                          disabled={isPast || isClosed}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[
+                              styles.dayText,
+                              isSelected && styles.dayTextSelected,
+                              isPast && styles.dayTextPast,
+                              isClosed && styles.dayTextClosed,
+                            ]}
+                          >
+                            {date.getDate()}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                {/* Time Slot Selection - Only show slots when place is open on selected date */}
+                <View style={styles.timeSlotContainer}>
+                  <Text
+                    style={[
+                      styles.timeSlotTitle,
+                      !selectedDate && styles.timeSlotTitleDisabled,
+                    ]}
+                  >
+                    Select time
+                  </Text>
+                  {selectedDate && timeSlots.length === 0 ? (
+                    <Text style={styles.timeSlotClosedText}>
+                      Place is closed on this day
+                    </Text>
+                  ) : (
+                  <View style={styles.timeSlotGrid}>
+                    {timeSlots.map((timeSlot, index) => {
+                      const isSelected = selectedTimeSlot === timeSlot;
+                      const isDisabled = !selectedDate;
+                      return (
+                        <TouchableOpacity
+                          key={index}
+                          style={[
+                            styles.timeSlotButton,
+                            isSelected && styles.timeSlotButtonSelected,
                             !isDisabled &&
                               !isSelected &&
-                              styles.timeSlotTextEnabled,
-                            isDisabled && styles.timeSlotTextDisabled,
+                              styles.timeSlotButtonEnabled,
+                            isDisabled && styles.timeSlotButtonDisabled,
                           ]}
+                          onPress={() => handleTimeSlotPress(timeSlot)}
+                          disabled={isDisabled}
+                          activeOpacity={0.7}
                         >
-                          {timeSlot}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Guests Input Field */}
-              <View style={styles.guestsContainer}>
-                <Text
-                  style={[
-                    styles.guestsTitle,
-                    (!selectedDate || !selectedTimeSlot) &&
-                      styles.guestsTitleDisabled,
-                  ]}
-                >
-                  Number of guests
-                </Text>
-                <View
-                  style={[
-                    styles.guestsInputContainer,
-                    (!selectedDate || !selectedTimeSlot) &&
-                      styles.guestsInputContainerDisabled,
-                  ]}
-                >
-                  <Ionicons
-                    name="people-outline"
-                    size={20}
-                    color={colors.textSecondary}
-                    style={styles.guestsIcon}
-                  />
-                  <TextInput
-                    style={[
-                      styles.guestsInput,
-                      (!selectedDate || !selectedTimeSlot) &&
-                        styles.guestsInputDisabled,
-                    ]}
-                    placeholder="Enter number of guests"
-                    placeholderTextColor={colors.textSecondary}
-                    value={guests}
-                    onChangeText={setGuests}
-                    keyboardType="numeric"
-                    editable={!!(selectedDate && selectedTimeSlot)}
-                  />
-                </View>
-              </View>
-            </ScrollView>
-
-            {/* Pay and Book Button */}
-            <View style={styles.footer}>
-              {/* Breakdown Toggle */}
-              <TouchableOpacity
-                style={styles.breakdownToggle}
-                onPress={() => setShowBreakdown(true)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.breakdownToggleText}>Price breakdown</Text>
-                <Ionicons
-                  name="chevron-up"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.payButton}
-                onPress={handlePayAndBook}
-                activeOpacity={0.8}
-                disabled={paying}
-              >
-                <View style={styles.payButtonContent}>
-                  {paying ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <>
-                      <Text style={styles.payButtonText}>Pay and Book</Text>
-                      <Text style={styles.payButtonAmount}>
-                        ${bookingTotal.total.toFixed(2)}
-                      </Text>
-                    </>
+                          <Text
+                            style={[
+                              styles.timeSlotText,
+                              isSelected && styles.timeSlotTextSelected,
+                              !isDisabled &&
+                                !isSelected &&
+                                styles.timeSlotTextEnabled,
+                              isDisabled && styles.timeSlotTextDisabled,
+                            ]}
+                          >
+                            {timeSlot}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                   )}
                 </View>
-              </TouchableOpacity>
+
+                {/* Guests Input Field */}
+                <View style={styles.guestsContainer}>
+                  <Text
+                    style={[
+                      styles.guestsTitle,
+                      (!selectedDate || !selectedTimeSlot) &&
+                        styles.guestsTitleDisabled,
+                    ]}
+                  >
+                    Number of guests
+                  </Text>
+                  <View
+                    style={[
+                      styles.guestsInputContainer,
+                      (!selectedDate || !selectedTimeSlot) &&
+                        styles.guestsInputContainerDisabled,
+                    ]}
+                  >
+                    <Ionicons
+                      name="people-outline"
+                      size={20}
+                      color={colors.textSecondary}
+                      style={styles.guestsIcon}
+                    />
+                    <TextInput
+                      style={[
+                        styles.guestsInput,
+                        (!selectedDate || !selectedTimeSlot) &&
+                          styles.guestsInputDisabled,
+                      ]}
+                      placeholder="Enter number of guests"
+                      placeholderTextColor={colors.textSecondary}
+                      value={guests}
+                      onChangeText={setGuests}
+                      keyboardType="numeric"
+                      editable={!!(selectedDate && selectedTimeSlot)}
+                    />
+                  </View>
+                </View>
+              </ScrollView>
+
+              {/* Pay and Book Button */}
+              <View style={styles.footer}>
+                {/* Breakdown Toggle */}
+                <TouchableOpacity
+                  style={styles.breakdownToggle}
+                  onPress={() => setShowBreakdown(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.breakdownToggleText}>
+                    Price breakdown
+                  </Text>
+                  <Ionicons
+                    name="chevron-up"
+                    size={20}
+                    color={colors.textSecondary}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.payButton}
+                  onPress={handlePayAndBook}
+                  activeOpacity={0.8}
+                  disabled={paying}
+                >
+                  <View style={styles.payButtonContent}>
+                    {paying ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <>
+                        <Text style={styles.payButtonText}>Pay and Book</Text>
+                        <Text style={styles.payButtonAmount}>
+                          ₹{bookingTotal.total.toFixed(2)}
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </BlurContainer>
+          </BlurContainer>
         )}
       </View>
 
@@ -639,7 +830,9 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
         <View style={styles.paymentProcessingOverlay}>
           <View style={styles.paymentProcessingContent}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.paymentProcessingText}>Payment processing...</Text>
+            <Text style={styles.paymentProcessingText}>
+              Payment processing...
+            </Text>
           </View>
         </View>
       </Modal>
@@ -682,22 +875,22 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
                     <View style={styles.breakdownDetails}>
                       <View style={styles.breakdownRow}>
                         <Text style={styles.breakdownLabel}>
-                          $
+                          ₹
                           {placeDetails?.price_per_night ||
                             placeDetails?.avg_price ||
                             placeDetails?.price ||
                             0}{" "}
-                          × {parseInt(guests, 10) || 1} guest
+                          × {parseInt(guests, 10) || 0} guest
                           {parseInt(guests, 10) !== 1 ? "s" : ""}
                         </Text>
                         <Text style={styles.breakdownValue}>
-                          ${bookingTotal.subtotal.toFixed(2)}
+                          ₹{bookingTotal.subtotal.toFixed(2)}
                         </Text>
                       </View>
                       <View style={styles.breakdownRow}>
                         <Text style={styles.breakdownLabel}>Service fee</Text>
                         <Text style={styles.breakdownValue}>
-                          ${bookingTotal.serviceFee.toFixed(2)}
+                          ₹{bookingTotal.serviceFee.toFixed(2)}
                         </Text>
                       </View>
                       <View
@@ -705,7 +898,7 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
                       >
                         <Text style={styles.breakdownTotalLabel}>Total</Text>
                         <Text style={styles.breakdownTotalValue}>
-                          ${bookingTotal.total.toFixed(2)}
+                          ₹{bookingTotal.total.toFixed(2)}
                         </Text>
                       </View>
                     </View>
@@ -932,6 +1125,9 @@ const styles = StyleSheet.create({
   dayCellPast: {
     opacity: 0.3,
   },
+  dayCellClosed: {
+    opacity: 0.4,
+  },
   dayText: {
     fontSize: 14,
     fontFamily: fonts.regular,
@@ -943,6 +1139,9 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
   },
   dayTextPast: {
+    color: colors.textSecondary,
+  },
+  dayTextClosed: {
     color: colors.textSecondary,
   },
   timeSlotContainer: {
@@ -961,6 +1160,13 @@ const styles = StyleSheet.create({
   },
   timeSlotTitleDisabled: {
     opacity: 0.4,
+  },
+  timeSlotClosedText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontFamily: fonts.regular,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
   },
   timeSlotGrid: {
     flexDirection: "row",

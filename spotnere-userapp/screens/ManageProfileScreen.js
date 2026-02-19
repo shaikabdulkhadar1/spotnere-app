@@ -15,7 +15,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
-import { supabase } from "../config/supabase";
+import { api } from "../api/client";
 import { updateUserData, getCurrentUser } from "../utils/auth";
 import { Country, State, City } from "country-state-city";
 
@@ -109,28 +109,17 @@ const ManageProfileScreen = ({ userData: initialUserData, onBack }) => {
         return;
       }
 
-      // Update user in Supabase
-      const { error: updateError } = await supabase
-        .from("users")
-        .update({
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          phone_number: formData.phoneNumber,
-          email: formData.email,
-          address: formData.address,
-          city: formData.city,
-          state: formData.state,
-          country: formData.country,
-          postal_code: formData.postalCode,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userData.id);
-
-      if (updateError) {
-        console.error("❌ Error updating user:", updateError);
-        Alert.alert("Error", updateError.message || "Failed to update profile");
-        return;
-      }
+      await api.updateProfile(userData.id, {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phoneNumber: formData.phoneNumber,
+        email: formData.email,
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        country: formData.country,
+        postalCode: formData.postalCode,
+      });
 
       // Format updated user data
       const updatedUserData = {
@@ -159,7 +148,7 @@ const ManageProfileScreen = ({ userData: initialUserData, onBack }) => {
       Alert.alert("Success", "Profile updated successfully");
     } catch (error) {
       console.error("Error saving profile:", error);
-      Alert.alert("Error", error.message || "Failed to save profile");
+      Alert.alert("Error", error?.data?.error || error.message || "Failed to save profile");
     } finally {
       setIsSaving(false);
     }

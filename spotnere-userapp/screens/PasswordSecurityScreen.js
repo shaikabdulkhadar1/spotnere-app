@@ -12,9 +12,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
-import { supabase } from "../config/supabase";
+import { api } from "../api/client";
 import { getCurrentUser } from "../utils/auth";
-import { hashPassword, verifyPassword } from "../utils/auth";
 
 const PasswordSecurityScreen = ({ onBack }) => {
   const [formData, setFormData] = useState({
@@ -69,46 +68,19 @@ const PasswordSecurityScreen = ({ onBack }) => {
         return;
       }
 
-      // Fetch current user from database to get password hash
-      const { data: dbUser, error: fetchError } = await supabase
-        .from("users")
-        .select("password_hash")
-        .eq("id", user.id)
-        .single();
-
-      if (fetchError || !dbUser) {
-        console.error("❌ Error fetching user:", fetchError);
-        Alert.alert("Error", "Failed to verify current password");
-        return;
-      }
-
-      // Verify current password
-      const isCurrentPasswordValid = await verifyPassword(
-        formData.currentPassword,
-        dbUser.password_hash
-      );
-
-      if (!isCurrentPasswordValid) {
-        Alert.alert("Error", "Current password is incorrect");
-        setErrors({ currentPassword: "Current password is incorrect" });
-        return;
-      }
-
-      // Hash new password
-      const hashedNewPassword = await hashPassword(formData.newPassword);
-
-      // Update password in database
-      const { error: updateError } = await supabase
-        .from("users")
-        .update({
-          password_hash: hashedNewPassword,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", user.id);
-
-      if (updateError) {
-        console.error("❌ Error updating password:", updateError);
-        Alert.alert("Error", updateError.message || "Failed to update password");
+      try {
+        await api.updatePassword(
+          user.id,
+          formData.currentPassword,
+          formData.newPassword
+        );
+      } catch (err) {
+        const msg = err?.data?.error || err?.message || "Failed to update password";
+        if (msg.toLowerCase().includes("current password")) {
+          setErrors({ currentPassword: "Current password is incorrect" });
+          return;
+        }
+        Alert.alert("Error", msg);
         return;
       }
 

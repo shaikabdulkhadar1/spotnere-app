@@ -7,7 +7,7 @@ require("dotenv").config();
 
 export default {
   expo: {
-    name: "Spotnere – Discover & Book",
+    name: "Spotnere",
     owner: "shaikabdulkhadar571",
     slug: "spotnere-mobileapp",
     version: "1.0.0",
@@ -54,7 +54,10 @@ export default {
       supabaseAnonKey:
         process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY,
       countryStateCityApi: process.env.COUNTRY_STATE_CITY_API,
-      apiBaseUrl: process.env.API_BASE_URL || process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:5001",
+      apiBaseUrl:
+        process.env.API_BASE_URL ||
+        process.env.EXPO_PUBLIC_API_BASE_URL ||
+        "http://localhost:5001",
       eas: {
         projectId: "b8b05f81-ba37-4e6f-a0f8-fe47a2ad058b",
       },

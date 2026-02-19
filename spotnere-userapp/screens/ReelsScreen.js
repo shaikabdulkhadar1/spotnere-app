@@ -12,7 +12,7 @@ import {
   StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { supabase } from "../config/supabase";
+import { api } from "../api/client";
 import PlaceCard from "../components/PlaceCard";
 import SkeletonCard from "../components/SkeletonCard";
 import { colors } from "../constants/colors";
@@ -35,7 +35,6 @@ const ReelsScreen = ({ userCountry, onPlacePress, onBack }) => {
       setLoading(true);
       setError(null);
 
-      // Get reel place IDs from local storage
       const reelIds = await getReels();
 
       if (!reelIds || reelIds.length === 0) {
@@ -44,25 +43,7 @@ const ReelsScreen = ({ userCountry, onPlacePress, onBack }) => {
         return;
       }
 
-      // Check if supabase is available
-      if (!supabase) {
-        throw new Error("Supabase client is not initialized");
-      }
-
-      // Fetch reel places from database
-      let query = supabase.from("places").select("*").in("id", reelIds);
-
-      // Optionally filter by country
-      if (userCountry) {
-        query = query.eq("country", userCountry);
-      }
-
-      const { data: places, error: fetchError } = await query;
-
-      if (fetchError) {
-        console.error("❌ Error fetching reels:", fetchError);
-        throw new Error(`Failed to fetch reels: ${fetchError.message}`);
-      }
+      const places = await api.getPlacesByIds(reelIds, userCountry || undefined);
 
       if (!places || places.length === 0) {
         setReels([]);

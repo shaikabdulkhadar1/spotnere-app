@@ -993,7 +993,7 @@ const VenduDetailsScreen = () => {
     >
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Vendu Details</Text>
+        <Text style={styles.title}>Venu Details</Text>
         <Text style={styles.description}>
           Manage your business information and vendor details
         </Text>

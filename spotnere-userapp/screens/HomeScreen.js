@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
-import { supabase } from "../config/supabase";
+import { api } from "../api/client";
 import PlaceCard from "../components/PlaceCard";
 import SkeletonCard from "../components/SkeletonCard";
 import { colors } from "../constants/colors";
@@ -143,25 +143,7 @@ const HomeScreen = ({
       setLoading(true);
       setError(null);
 
-      // Check if supabase is available
-      if (!supabase) {
-        throw new Error("Supabase client is not initialized");
-      }
-
-      // Fetch all places filtered by country (no pagination)
-      let query = supabase.from("places").select("*");
-
-      // Filter by country if provided
-      if (userCountry) {
-        query = query.eq("country", userCountry);
-      }
-
-      const { data: allPlaces, error: fetchError } = await query;
-
-      if (fetchError) {
-        console.error("❌ Error fetching places:", fetchError);
-        throw new Error(`Failed to fetch places: ${fetchError.message}`);
-      }
+      const allPlaces = await api.getPlaces(userCountry ? { country: userCountry } : {});
 
       if (!allPlaces || allPlaces.length === 0) {
         setAllPlacesData([]);

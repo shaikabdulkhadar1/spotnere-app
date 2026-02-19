@@ -12,7 +12,7 @@ import {
   StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { supabase } from "../config/supabase";
+import { api } from "../api/client";
 import PlaceCard from "../components/PlaceCard";
 import SkeletonCard from "../components/SkeletonCard";
 import { colors } from "../constants/colors";
@@ -40,12 +40,6 @@ const FavoriteScreen = ({ userCountry, onPlacePress, onBack }) => {
       setLoading(true);
       setError(null);
 
-      // Check if supabase is available
-      if (!supabase) {
-        throw new Error("Supabase client is not initialized");
-      }
-
-      // Get current user
       const user = await getCurrentUser();
       if (!user || !user.id) {
         setFavoritePlaces([]);
@@ -53,7 +47,6 @@ const FavoriteScreen = ({ userCountry, onPlacePress, onBack }) => {
         return;
       }
 
-      // Try to get cached favorites first
       const cachedFavorites = await getCachedFavorites(user.id, userCountry);
       if (cachedFavorites) {
         setFavoritePlaces(cachedFavorites);
@@ -61,44 +54,7 @@ const FavoriteScreen = ({ userCountry, onPlacePress, onBack }) => {
         return;
       }
 
-      // Fetch favorite place IDs from user_places table
-      const { data: userPlaces, error: userPlacesError } = await supabase
-        .from("user_places")
-        .select("fav_place_id")
-        .eq("user_id", user.id);
-
-      if (userPlacesError) {
-        console.error("❌ Error fetching user favorites:", userPlacesError);
-        throw new Error(
-          `Failed to fetch favorites: ${userPlacesError.message}`,
-        );
-      }
-
-      if (!userPlaces || userPlaces.length === 0) {
-        setFavoritePlaces([]);
-        // Cache empty result
-        await setCachedFavorites([], user.id, userCountry);
-        setLoading(false);
-        return;
-      }
-
-      // Extract place IDs from user_places
-      const favoriteIds = userPlaces.map((up) => up.fav_place_id);
-
-      // Fetch favorite places from places table
-      let query = supabase.from("places").select("*").in("id", favoriteIds);
-
-      // Optionally filter by country
-      if (userCountry) {
-        query = query.eq("country", userCountry);
-      }
-
-      const { data: places, error: fetchError } = await query;
-
-      if (fetchError) {
-        console.error("❌ Error fetching favorite places:", fetchError);
-        throw new Error(`Failed to fetch favorites: ${fetchError.message}`);
-      }
+      const places = await api.getFavorites(user.id, userCountry || undefined);
 
       if (!places || places.length === 0) {
         setFavoritePlaces([]);

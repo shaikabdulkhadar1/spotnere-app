@@ -22,7 +22,6 @@ import { useState, useEffect, useRef } from "react";
 import { useFonts } from "expo-font";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
-import { supabase } from "./config/supabase";
 import HomeScreen from "./screens/HomeScreen";
 import FavoriteScreen from "./screens/FavoriteScreen";
 import MapScreen from "./screens/MapScreen";

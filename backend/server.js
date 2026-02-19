@@ -581,6 +581,600 @@ app.get("/payments/razorpay/status", async (req, res) => {
   }
 });
 
+// ---------- API Routes (moved from userapp) ----------
+
+/**
+ * GET /api/places?country=...
+ * Fetch places filtered by country.
+ */
+app.get("/api/places", async (req, res) => {
+  try {
+    const { country } = req.query;
+    let query = supabaseAdmin.from("places").select("*");
+    if (country) query = query.eq("country", country);
+    const { data, error } = await query;
+    if (error) throw error;
+    return res.json(data || []);
+  } catch (err) {
+    console.error("api/places error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to fetch places" });
+  }
+});
+
+/**
+ * POST /api/places/by-ids
+ * body: { placeIds: string[], country?: string }
+ * Fetch places by IDs.
+ */
+app.post("/api/places/by-ids", async (req, res) => {
+  try {
+    const { placeIds, country } = req.body || {};
+    if (!placeIds || !Array.isArray(placeIds) || placeIds.length === 0) {
+      return res.status(400).json({ error: "placeIds array is required" });
+    }
+    let query = supabaseAdmin.from("places").select("*").in("id", placeIds);
+    if (country) query = query.eq("country", country);
+    const { data, error } = await query;
+    if (error) throw error;
+    return res.json(data || []);
+  } catch (err) {
+    console.error("api/places/by-ids error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to fetch places" });
+  }
+});
+
+/**
+ * GET /api/places/:placeId
+ * Fetch single place.
+ */
+app.get("/api/places/:placeId", async (req, res) => {
+  try {
+    const { placeId } = req.params;
+    const { data, error } = await supabaseAdmin
+      .from("places")
+      .select("*")
+      .eq("id", placeId)
+      .single();
+    if (error) throw error;
+    return res.json(data);
+  } catch (err) {
+    console.error("api/places/:placeId error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to fetch place" });
+  }
+});
+
+/**
+ * GET /api/places/:placeId/reviews
+ * Fetch reviews for a place.
+ */
+app.get("/api/places/:placeId/reviews", async (req, res) => {
+  try {
+    const { placeId } = req.params;
+    const { data, error } = await supabaseAdmin
+      .from("reviews")
+      .select(
+        `
+        user_id,
+        place_id,
+        review,
+        rating,
+        created_at,
+        user:users!user_id(first_name, last_name)
+      `,
+      )
+      .eq("place_id", placeId)
+      .order("created_at", { ascending: false });
+    if (error) {
+      const { data: fallback } = await supabaseAdmin
+        .from("reviews")
+        .select("user_id, place_id, review, rating, created_at")
+        .eq("place_id", placeId)
+        .order("created_at", { ascending: false });
+      return res.json(fallback || []);
+    }
+    return res.json(data || []);
+  } catch (err) {
+    console.error("api/places/:placeId/reviews error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to fetch reviews" });
+  }
+});
+
+/**
+ * GET /api/places/:placeId/gallery
+ * Fetch gallery images.
+ */
+app.get("/api/places/:placeId/gallery", async (req, res) => {
+  try {
+    const { placeId } = req.params;
+    const { data, error } = await supabaseAdmin
+      .from("gallery_images")
+      .select("id, gallery_image_url")
+      .eq("place_id", placeId)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return res.json(data || []);
+  } catch (err) {
+    console.error("api/places/:placeId/gallery error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to fetch gallery" });
+  }
+});
+
+/**
+ * GET /api/places/:placeId/vendor
+ * Fetch vendor for a place.
+ */
+app.get("/api/places/:placeId/vendor", async (req, res) => {
+  try {
+    const { placeId } = req.params;
+    const { data, error } = await supabaseAdmin
+      .from("vendors")
+      .select(
+        "business_name, vendor_full_name, vendor_phone_number, vendor_email, vendor_address, vendor_city, vendor_state, vendor_country, vendor_postal_code, upi_id",
+      )
+      .eq("place_id", placeId)
+      .maybeSingle();
+    if (error) throw error;
+    return res.json(data || null);
+  } catch (err) {
+    console.error("api/places/:placeId/vendor error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to fetch vendor" });
+  }
+});
+
+/**
+ * POST /api/places/:placeId/reviews
+ * body: { userId, review, rating }
+ * Add review and update place rating.
+ */
+app.post("/api/places/:placeId/reviews", async (req, res) => {
+  try {
+    const { placeId } = req.params;
+    const { userId, review, rating } = req.body || {};
+    if (!userId || !review || !rating) {
+      return res.status(400).json({ error: "userId, review, and rating are required" });
+    }
+    const insertPayload = {
+      user_id: userId,
+      place_id: placeId,
+      review: String(review).trim(),
+      rating: Number(rating),
+    };
+    const { data: inserted, error: insertError } = await supabaseAdmin
+      .from("reviews")
+      .insert([insertPayload])
+      .select()
+      .single();
+    if (insertError) throw insertError;
+
+    const { data: allReviews } = await supabaseAdmin
+      .from("reviews")
+      .select("rating")
+      .eq("place_id", placeId);
+    const avgRating =
+      allReviews && allReviews.length > 0
+        ? allReviews.reduce((sum, r) => sum + parseFloat(r.rating ?? 0), 0) / allReviews.length
+        : 0;
+    const roundedAvg = Math.round(avgRating * 10) / 10;
+    await supabaseAdmin.from("places").update({ rating: roundedAvg }).eq("id", placeId);
+
+    return res.json(inserted);
+  } catch (err) {
+    console.error("api/places/:placeId/reviews POST error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to add review" });
+  }
+});
+
+/**
+ * GET /api/favorites?userId=...
+ * Fetch favorite place IDs and places.
+ */
+app.get("/api/favorites", async (req, res) => {
+  try {
+    const { userId, country } = req.query;
+    if (!userId) return res.status(400).json({ error: "userId is required" });
+    const { data: userPlaces, error: upError } = await supabaseAdmin
+      .from("user_places")
+      .select("fav_place_id")
+      .eq("user_id", userId);
+    if (upError) throw upError;
+    if (!userPlaces || userPlaces.length === 0) return res.json([]);
+    const favoriteIds = userPlaces.map((u) => u.fav_place_id);
+    let query = supabaseAdmin.from("places").select("*").in("id", favoriteIds);
+    if (country) query = query.eq("country", country);
+    const { data: places, error } = await query;
+    if (error) throw error;
+    return res.json(places || []);
+  } catch (err) {
+    console.error("api/favorites error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to fetch favorites" });
+  }
+});
+
+/**
+ * POST /api/favorites
+ * body: { userId, placeId }
+ */
+app.post("/api/favorites", async (req, res) => {
+  try {
+    const { userId, placeId } = req.body || {};
+    if (!userId || !placeId) {
+      return res.status(400).json({ error: "userId and placeId are required" });
+    }
+    const { error } = await supabaseAdmin.from("user_places").insert([
+      { user_id: userId, fav_place_id: placeId },
+    ]);
+    if (error) {
+      if (error.code === "23505") return res.json({ success: true });
+      throw error;
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("api/favorites POST error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to save favorite" });
+  }
+});
+
+/**
+ * DELETE /api/favorites
+ * body: { userId, placeId }
+ */
+app.delete("/api/favorites", async (req, res) => {
+  try {
+    const { userId, placeId } = req.body || req.query;
+    if (!userId || !placeId) {
+      return res.status(400).json({ error: "userId and placeId are required" });
+    }
+    const { error } = await supabaseAdmin
+      .from("user_places")
+      .delete()
+      .eq("user_id", userId)
+      .eq("fav_place_id", placeId);
+    if (error) throw error;
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("api/favorites DELETE error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to remove favorite" });
+  }
+});
+
+/**
+ * GET /api/favorites/check?userId=...&placeId=...
+ */
+app.get("/api/favorites/check", async (req, res) => {
+  try {
+    const { userId, placeId } = req.query;
+    if (!userId || !placeId) return res.json({ favorited: false });
+    const { data, error } = await supabaseAdmin
+      .from("user_places")
+      .select("fav_place_id")
+      .eq("user_id", userId)
+      .eq("fav_place_id", placeId)
+      .maybeSingle();
+    if (error) throw error;
+    return res.json({ favorited: !!data });
+  } catch (err) {
+    console.error("api/favorites/check error:", err);
+    return res.json({ favorited: false });
+  }
+});
+
+/**
+ * GET /api/bookings?userId=...
+ * Fetch user bookings with place details.
+ */
+app.get("/api/bookings", async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ error: "userId is required" });
+    const { data: bookingsWithPlaces, error: joinError } = await supabaseAdmin
+      .from("bookings")
+      .select(
+        `
+        id,
+        place_id,
+        booking_date_time,
+        booking_ref_number,
+        amount_paid,
+        currency_paid,
+        payment_status,
+        number_of_guests,
+        payment_method,
+        paid_at,
+        transaction_id,
+        places!place_id (
+          id,
+          name,
+          banner_image_link,
+          avg_price,
+          rating,
+          country,
+          city,
+          address
+        )
+      `,
+      )
+      .eq("user_id", userId)
+      .order("booking_date_time", { ascending: false });
+    if (!joinError && bookingsWithPlaces && bookingsWithPlaces.length > 0) {
+      const formatted = bookingsWithPlaces.map((b) => {
+        const place = b.places || b.place || {};
+        return {
+          id: b.id,
+          placeId: b.place_id || place.id,
+          title: place.name || "Place",
+          price: `$${place.avg_price || 0} per person`,
+          imageUri: place.banner_image_link,
+          isSmall: false,
+          country: place.country,
+          bookingRefNumber: b.booking_ref_number,
+          bookingDateTime: b.booking_date_time,
+          amountPaid: b.amount_paid,
+          currencyPaid: b.currency_paid,
+          paymentStatus: b.payment_status,
+          numberOfGuests: b.number_of_guests,
+          paymentMethod: b.payment_method,
+          paidAt: b.paid_at,
+          transactionId: b.transaction_id,
+        };
+      });
+      return res.json(formatted);
+    }
+    const { data: bookings, error } = await supabaseAdmin
+      .from("bookings")
+      .select(
+        "id, place_id, booking_date_time, booking_ref_number, amount_paid, currency_paid, payment_status, number_of_guests, payment_method, paid_at, transaction_id",
+      )
+      .eq("user_id", userId)
+      .order("booking_date_time", { ascending: false });
+    if (error) throw error;
+    if (!bookings || bookings.length === 0) return res.json([]);
+    const placeIds = [...new Set(bookings.map((b) => b.place_id).filter(Boolean))];
+    const { data: places } = await supabaseAdmin
+      .from("places")
+      .select("id, name, banner_image_link, avg_price, rating, country, city, address")
+      .in("id", placeIds);
+    const placesMap = (places || []).reduce((acc, p) => {
+      acc[String(p.id)] = p;
+      return acc;
+    }, {});
+    const formatted = bookings.map((b) => {
+      const place = placesMap[String(b.place_id)] || {};
+      return {
+        id: b.id,
+        placeId: b.place_id,
+        title: place.name || "Place",
+        price: `$${place.avg_price || 0} per person`,
+        imageUri: place.banner_image_link,
+        isSmall: false,
+        country: place.country,
+        bookingRefNumber: b.booking_ref_number,
+        bookingDateTime: b.booking_date_time,
+        amountPaid: b.amount_paid,
+        currencyPaid: b.currency_paid,
+        paymentStatus: b.payment_status,
+        numberOfGuests: b.number_of_guests,
+        paymentMethod: b.payment_method,
+        paidAt: b.paid_at,
+        transactionId: b.transaction_id,
+      };
+    });
+    return res.json(formatted);
+  } catch (err) {
+    console.error("api/bookings error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to fetch bookings" });
+  }
+});
+
+// Auth helpers (match userapp utils/auth.js)
+const SALT_ROUNDS = 10000;
+const sha256 = (text) =>
+  crypto.createHash("sha256").update(text).digest("hex");
+const generateSalt = () => crypto.randomBytes(16).toString("hex");
+const hashPassword = async (password) => {
+  const salt = generateSalt();
+  let hash = password + salt;
+  for (let i = 0; i < SALT_ROUNDS; i++) hash = sha256(hash);
+  return `${salt}:${hash}`;
+};
+const verifyPassword = async (password, storedHash) => {
+  if (!storedHash || !storedHash.includes(":")) return false;
+  const [salt, hash] = storedHash.split(":");
+  let h = password + salt;
+  for (let i = 0; i < SALT_ROUNDS; i++) h = sha256(h);
+  return h === hash;
+};
+
+/**
+ * POST /api/auth/register
+ * body: { firstName, lastName, phoneNumber, email, password, address, city, state, country, postalCode }
+ */
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const {
+      firstName,
+      lastName,
+      phoneNumber,
+      email,
+      password,
+      address,
+      city,
+      state,
+      country,
+      postalCode,
+    } = body;
+    if (!email || !password) {
+      return res.status(400).json({ error: "email and password are required" });
+    }
+    const { data: existing } = await supabaseAdmin
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .maybeSingle();
+    if (existing) {
+      return res.status(400).json({ error: "User with this email already exists" });
+    }
+    const hashedPassword = await hashPassword(password);
+    const userData = {
+      first_name: firstName || "",
+      last_name: lastName || "",
+      phone_number: phoneNumber || "",
+      email,
+      password_hash: hashedPassword,
+      address: address || "",
+      city: city || "",
+      state: state || "",
+      country: country || "",
+      postal_code: postalCode || "",
+      created_at: new Date().toISOString(),
+    };
+    const { data: newUser, error } = await supabaseAdmin
+      .from("users")
+      .insert([userData])
+      .select()
+      .single();
+    if (error) throw error;
+    const formatted = {
+      id: newUser.id,
+      name: `${newUser.first_name} ${newUser.last_name}`,
+      firstName: newUser.first_name,
+      lastName: newUser.last_name,
+      email: newUser.email,
+      phoneNumber: newUser.phone_number,
+      address: {
+        address: newUser.address,
+        city: newUser.city,
+        state: newUser.state,
+        country: newUser.country,
+        postalCode: newUser.postal_code,
+      },
+      createdAt: newUser.created_at,
+    };
+    return res.json({ success: true, user: formatted });
+  } catch (err) {
+    console.error("api/auth/register error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to register" });
+  }
+});
+
+/**
+ * POST /api/auth/login
+ * body: { email, password }
+ */
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) {
+      return res.status(400).json({ error: "email and password are required" });
+    }
+    const { data: user, error } = await supabaseAdmin
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .single();
+    if (error || !user) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+    if (!user.password_hash) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+    const valid = await verifyPassword(password, user.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+    const formatted = {
+      id: user.id,
+      name: `${user.first_name} ${user.last_name}`,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      email: user.email,
+      phoneNumber: user.phone_number,
+      address: {
+        address: user.address,
+        city: user.city,
+        state: user.state,
+        country: user.country,
+        postalCode: user.postal_code,
+      },
+      createdAt: user.created_at,
+    };
+    return res.json({ success: true, user: formatted });
+  } catch (err) {
+    console.error("api/auth/login error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to login" });
+  }
+});
+
+/**
+ * PATCH /api/users/:userId
+ * body: { firstName, lastName, phoneNumber, email, address, city, state, country, postalCode }
+ */
+app.patch("/api/users/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const body = req.body || {};
+    if (!userId) return res.status(400).json({ error: "userId is required" });
+    const patch = {
+      updated_at: new Date().toISOString(),
+    };
+    if (body.firstName != null) patch.first_name = body.firstName;
+    else if (body.first_name != null) patch.first_name = body.first_name;
+    if (body.lastName != null) patch.last_name = body.lastName;
+    else if (body.last_name != null) patch.last_name = body.last_name;
+    if (body.phoneNumber != null) patch.phone_number = body.phoneNumber;
+    else if (body.phone_number != null) patch.phone_number = body.phone_number;
+    if (body.email != null) patch.email = body.email;
+    if (body.address != null) patch.address = body.address;
+    if (body.city != null) patch.city = body.city;
+    if (body.state != null) patch.state = body.state;
+    if (body.country != null) patch.country = body.country;
+    if (body.postalCode != null) patch.postal_code = body.postalCode;
+    else if (body.postal_code != null) patch.postal_code = body.postal_code;
+    const { error } = await supabaseAdmin.from("users").update(patch).eq("id", userId);
+    if (error) throw error;
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("api/users PATCH error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to update profile" });
+  }
+});
+
+/**
+ * PATCH /api/users/:userId/password
+ * body: { currentPassword, newPassword }
+ */
+app.patch("/api/users/:userId/password", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { currentPassword, newPassword } = req.body || {};
+    if (!userId || !currentPassword || !newPassword) {
+      return res.status(400).json({ error: "currentPassword and newPassword are required" });
+    }
+    const { data: dbUser, error: fetchError } = await supabaseAdmin
+      .from("users")
+      .select("password_hash")
+      .eq("id", userId)
+      .single();
+    if (fetchError || !dbUser) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const valid = await verifyPassword(currentPassword, dbUser.password_hash);
+    if (!valid) {
+      return res.status(400).json({ error: "Current password is incorrect" });
+    }
+    const hashedNew = await hashPassword(newPassword);
+    const { error: updateError } = await supabaseAdmin
+      .from("users")
+      .update({ password_hash: hashedNew, updated_at: new Date().toISOString() })
+      .eq("id", userId);
+    if (updateError) throw updateError;
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("api/users/password error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to update password" });
+  }
+});
+
 // ---------- Start ----------
 // 0.0.0.0 = accept connections from any interface (needed for Android/device testing)
 const HOST = process.env.HOST || "0.0.0.0";

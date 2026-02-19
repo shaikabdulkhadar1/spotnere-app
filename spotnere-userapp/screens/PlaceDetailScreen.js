@@ -32,7 +32,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
-import { supabase } from "../config/supabase";
+import { api } from "../api/client";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
 import { getCurrentUser } from "../utils/auth";
@@ -152,14 +152,7 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
     try {
       setLoading(true);
       setError(null);
-
-      const { data, error: fetchError } = await supabase
-        .from("places")
-        .select("*")
-        .eq("id", placeId)
-        .single();
-
-      if (fetchError) throw fetchError;
+      const data = await api.getPlace(placeId);
       setPlaceDetails(data);
     } catch (err) {
       setError(err?.message || "Failed to fetch place details");
@@ -170,47 +163,9 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
 
   const fetchReviews = async () => {
     try {
-      const { data, error: fetchError } = await supabase
-        .from("reviews")
-        .select(
-          `
-          user_id,
-          place_id,
-          review,
-          rating,
-          created_at,
-          user:users!user_id(first_name, last_name)
-        `,
-        )
-        .eq("place_id", placeId)
-        .order("created_at", { ascending: false });
-
-      if (fetchError) {
-        const { data: reviewsData, error: reviewsError } = await supabase
-          .from("reviews")
-          .select("user_id, place_id, review, rating, created_at")
-          .eq("place_id", placeId)
-          .order("created_at", { ascending: false });
-
-        if (reviewsError) {
-          setReviews([]);
-          return;
-        }
-
-        const formatted = (reviewsData || []).map((r, index) => ({
-          id: r.user_id + "-" + index,
-          review: r.review,
-          rating: r.rating,
-          user_name: "User",
-          user_avatar:
-            "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=50&h=50&fit=crop",
-        }));
-        setReviews(formatted);
-        return;
-      }
-
+      const data = await api.getPlaceReviews(placeId);
       const formatted = (data || []).map((r, index) => ({
-        id: r.user_id + "-" + index,
+        id: (r.user_id || "u") + "-" + index,
         review: r.review,
         rating: r.rating,
         user_name: r.user
@@ -228,16 +183,7 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
 
   const fetchGalleryImages = async () => {
     try {
-      const { data, error: fetchError } = await supabase
-        .from("gallery_images")
-        .select("id, gallery_image_url")
-        .eq("place_id", placeId)
-        .order("created_at", { ascending: true });
-
-      if (fetchError) {
-        setGalleryImages([]);
-        return;
-      }
+      const data = await api.getPlaceGallery(placeId);
       setGalleryImages(data || []);
     } catch (err) {
       setGalleryImages([]);
@@ -246,19 +192,8 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
 
   const fetchVendorDetails = async () => {
     try {
-      const { data, error: fetchError } = await supabase
-        .from("vendors")
-        .select(
-          "business_name, vendor_full_name, vendor_phone_number, vendor_email, vendor_address, vendor_city, vendor_state, vendor_country, vendor_postal_code, upi_id",
-        )
-        .eq("place_id", placeId)
-        .maybeSingle();
-
-      if (fetchError) {
-        setVendor(null);
-        return;
-      }
-      setVendor(data);
+      const data = await api.getPlaceVendor(placeId);
+      setVendor(data || null);
     } catch (err) {
       setVendor(null);
     }
@@ -291,44 +226,11 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
     try {
       setSubmittingReview(true);
 
-      const insertPayload = {
-        user_id: user.id,
-        place_id: placeId,
+      await api.addReview(placeId, {
+        userId: user.id,
         review: trimmed,
         rating: Number(addReviewRating),
-      };
-
-      const { data, error: insertError } = await supabase
-        .from("reviews")
-        .insert([insertPayload])
-        .select();
-
-      if (insertError) {
-        console.error("Error adding review:", insertError);
-        Alert.alert("Error", insertError.message || "Failed to add review.", [
-          { text: "OK" },
-        ]);
-        return;
-      }
-
-      // Fetch all reviews for this place and calculate avg rating
-      const { data: allReviews } = await supabase
-        .from("reviews")
-        .select("rating")
-        .eq("place_id", placeId);
-
-      const avgRating =
-        allReviews && allReviews.length > 0
-          ? allReviews.reduce((sum, r) => sum + parseFloat(r.rating ?? 0), 0) /
-            allReviews.length
-          : 0;
-
-      // Update places.rating with new average
-      const roundedAvg = Math.round(avgRating * 10) / 10;
-      await supabase
-        .from("places")
-        .update({ rating: roundedAvg })
-        .eq("id", placeId);
+      });
 
       setShowAddReviewModal(false);
       setAddReviewText("");
@@ -550,7 +452,13 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
           <Text style={[styles.rowLabel, isToday && styles.rowLabelToday]}>
             {day.slice(0, 3)}
           </Text>
-          <Text style={[styles.rowValue, isToday && styles.rowValueToday]}>
+          <Text
+            style={[
+              styles.rowValue,
+              isToday && styles.rowValueToday,
+              value === "Closed" && styles.rowValueClosed,
+            ]}
+          >
             {value}
           </Text>
         </View>
@@ -588,9 +496,7 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            onScroll={(e) =>
-              setHeroScrollX(e.nativeEvent.contentOffset.x)
-            }
+            onScroll={(e) => setHeroScrollX(e.nativeEvent.contentOffset.x)}
             scrollEventThrottle={16}
             getItemLayout={(_, index) => ({
               length: width,
@@ -842,7 +748,7 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
               <View style={styles.row}>
                 <Text style={styles.rowLabel}>Avg price</Text>
                 <Text style={styles.rowValue}>
-                  $
+                  ₹
                   {placeDetails.avg_price ||
                     placeDetails.price_per_night ||
                     placeDetails.price}{" "}
@@ -875,7 +781,7 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
             ) : null}
 
             {/* Phone */}
-            {placeDetails.phone ||
+            {/* {placeDetails.phone ||
             placeDetails.phone_number ||
             placeDetails.contact_phone ? (
               <TouchableOpacity
@@ -897,7 +803,7 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
                   />
                 </View>
               </TouchableOpacity>
-            ) : null}
+            ) : null} */}
 
             {/* Website */}
             {placeDetails.website ||
@@ -910,14 +816,14 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
               >
                 <Text style={styles.rowLabel}>Website</Text>
                 <View style={styles.rowRight}>
-                  <Text
+                  {/* <Text
                     style={[styles.rowValue, styles.linkText]}
                     numberOfLines={1}
                   >
                     {placeDetails.website ||
                       placeDetails.website_url ||
                       placeDetails.url}
-                  </Text>
+                  </Text> */}
                   <Ionicons
                     name="chevron-forward"
                     size={16}
@@ -1149,7 +1055,7 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
                 </Text>
               </View>
 
-              {vendor.vendor_phone_number ? (
+              {/* {vendor.vendor_phone_number ? (
                 <TouchableOpacity
                   style={styles.row}
                   onPress={() =>
@@ -1169,7 +1075,7 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
                     />
                   </View>
                 </TouchableOpacity>
-              ) : null}
+              ) : null} */}
 
               {vendor.vendor_email ? (
                 <TouchableOpacity
@@ -1181,12 +1087,12 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
                 >
                   <Text style={styles.rowLabel}>Email</Text>
                   <View style={styles.rowRight}>
-                    <Text
+                    {/* <Text
                       style={[styles.rowValue, styles.linkText]}
                       numberOfLines={1}
                     >
                       {vendor.vendor_email}
-                    </Text>
+                    </Text> */}
                     <Ionicons
                       name="chevron-forward"
                       size={16}
@@ -1581,6 +1487,7 @@ const styles = StyleSheet.create({
     maxWidth: "62%",
   },
   rowValueToday: { fontFamily: fonts.semiBold, color: colors.text },
+  rowValueClosed: { fontFamily: fonts.bold, color: colors.error },
   rowRight: {
     flexDirection: "row",
     alignItems: "center",

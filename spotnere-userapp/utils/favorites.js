@@ -1,9 +1,9 @@
 /**
  * Favorites Utility
- * Manages favorite places using Supabase database and local cache
+ * Manages favorite places using backend API and local cache
  */
 
-import { supabase } from "../config/supabase";
+import { api } from "../api/client";
 import { clearFavoritesCache } from "./favoritesCache";
 
 // In-memory storage for favorites
@@ -157,10 +157,6 @@ export const clearFavorites = async () => {
  */
 export const saveFavoriteToDatabase = async (userId, placeId) => {
   try {
-    if (!supabase) {
-      throw new Error("Supabase client is not initialized");
-    }
-
     if (!userId || !placeId) {
       return {
         success: false,
@@ -168,46 +164,14 @@ export const saveFavoriteToDatabase = async (userId, placeId) => {
       };
     }
 
-    // Insert into user_places table
-    const { error } = await supabase
-      .from("user_places")
-      .insert([
-        {
-          user_id: userId,
-          fav_place_id: placeId,
-        },
-      ]);
-
-    if (error) {
-      // Check if it's a duplicate key error (already favorited)
-      if (error.code === "23505") {
-        // Unique constraint violation - already exists
-        return {
-          success: true,
-          error: null,
-        };
-      }
-      console.error("❌ Error saving favorite to database:", error);
-      return {
-        success: false,
-        error: error.message || "Failed to save favorite",
-      };
-    }
-
-    console.log("✅ Favorite saved to database:", { userId, placeId });
-    
-    // Clear cache to force refresh on next load
+    await api.addFavorite(userId, placeId);
     await clearFavoritesCache(userId);
-    
-    return {
-      success: true,
-      error: null,
-    };
+    return { success: true, error: null };
   } catch (error) {
     console.error("Error saving favorite to database:", error);
     return {
       success: false,
-      error: error.message || "Failed to save favorite",
+      error: error?.data?.error || error.message || "Failed to save favorite",
     };
   }
 };
@@ -220,10 +184,6 @@ export const saveFavoriteToDatabase = async (userId, placeId) => {
  */
 export const removeFavoriteFromDatabase = async (userId, placeId) => {
   try {
-    if (!supabase) {
-      throw new Error("Supabase client is not initialized");
-    }
-
     if (!userId || !placeId) {
       return {
         success: false,
@@ -231,35 +191,14 @@ export const removeFavoriteFromDatabase = async (userId, placeId) => {
       };
     }
 
-    // Delete from user_places table
-    const { error } = await supabase
-      .from("user_places")
-      .delete()
-      .eq("user_id", userId)
-      .eq("fav_place_id", placeId);
-
-    if (error) {
-      console.error("❌ Error removing favorite from database:", error);
-      return {
-        success: false,
-        error: error.message || "Failed to remove favorite",
-      };
-    }
-
-    console.log("✅ Favorite removed from database:", { userId, placeId });
-    
-    // Clear cache to force refresh on next load
+    await api.removeFavorite(userId, placeId);
     await clearFavoritesCache(userId);
-    
-    return {
-      success: true,
-      error: null,
-    };
+    return { success: true, error: null };
   } catch (error) {
     console.error("Error removing favorite from database:", error);
     return {
       success: false,
-      error: error.message || "Failed to remove favorite",
+      error: error?.data?.error || error.message || "Failed to remove favorite",
     };
   }
 };
@@ -272,27 +211,9 @@ export const removeFavoriteFromDatabase = async (userId, placeId) => {
  */
 export const isFavoriteInDatabase = async (userId, placeId) => {
   try {
-    if (!supabase || !userId || !placeId) {
-      return false;
-    }
-
-    const { data, error } = await supabase
-      .from("user_places")
-      .select("fav_place_id")
-      .eq("user_id", userId)
-      .eq("fav_place_id", placeId)
-      .single();
-
-    if (error) {
-      if (error.code === "PGRST116") {
-        // No rows returned - not favorited
-        return false;
-      }
-      console.error("Error checking favorite in database:", error);
-      return false;
-    }
-
-    return !!data;
+    if (!userId || !placeId) return false;
+    const { favorited } = await api.checkFavorite(userId, placeId);
+    return !!favorited;
   } catch (error) {
     console.error("Error checking favorite in database:", error);
     return false;

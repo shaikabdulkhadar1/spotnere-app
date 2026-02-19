@@ -1,11 +1,11 @@
 /**
  * Authentication Utility
- * Manages user authentication state using AsyncStorage and Supabase
+ * Manages user authentication state using AsyncStorage and backend API
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
-import { supabase } from "../config/supabase";
+import { api } from "../api/client";
 
 // Password hashing utility functions
 const SALT_ROUNDS = 10000; // Number of iterations for PBKDF2
@@ -111,78 +111,16 @@ export const isLoggedIn = async () => {
  */
 export const registerUser = async (formData) => {
   try {
-    if (!supabase) {
-      throw new Error("Supabase client is not initialized");
-    }
+    const { user: formattedUser } = await api.register(formData);
 
-    // Check if user already exists
-    const { data: existingUser, error: checkError } = await supabase
-      .from("users")
-      .select("*")
-      .eq("email", formData.email)
-      .single();
-
-    if (existingUser) {
+    if (!formattedUser) {
       return {
         success: false,
         user: null,
-        error: "User with this email already exists",
+        error: "Failed to create account",
       };
     }
 
-    // Hash password before storing
-    const hashedPassword = await hashPassword(formData.password);
-
-    // Prepare user data for insertion
-    const userData = {
-      first_name: formData.firstName,
-      last_name: formData.lastName,
-      phone_number: formData.phoneNumber,
-      email: formData.email,
-      password_hash: hashedPassword, // Store hashed password
-      address: formData.address,
-      city: formData.city,
-      state: formData.state,
-      country: formData.country,
-      postal_code: formData.postalCode,
-      created_at: new Date().toISOString(), // Current date and time in ISO format
-    };
-
-    // Insert user into database
-    const { data: newUser, error: insertError } = await supabase
-      .from("users")
-      .insert([userData])
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error("❌ Error registering user:", insertError);
-      return {
-        success: false,
-        user: null,
-        error: insertError.message || "Failed to create account",
-      };
-    }
-
-    // Format user data for app use
-    const formattedUser = {
-      id: newUser.id,
-      name: `${newUser.first_name} ${newUser.last_name}`,
-      firstName: newUser.first_name,
-      lastName: newUser.last_name,
-      email: newUser.email,
-      phoneNumber: newUser.phone_number,
-      address: {
-        address: newUser.address,
-        city: newUser.city,
-        state: newUser.state,
-        country: newUser.country,
-        postalCode: newUser.postal_code,
-      },
-      createdAt: newUser.created_at,
-    };
-
-    // Store in AsyncStorage for local access
     await AsyncStorage.setItem(AUTH_KEY, "authenticated");
     await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(formattedUser));
 
@@ -197,7 +135,7 @@ export const registerUser = async (formData) => {
     return {
       success: false,
       user: null,
-      error: error.message || "Failed to register user",
+      error: error?.data?.error || error.message || "Failed to register user",
     };
   }
 };
@@ -210,19 +148,9 @@ export const registerUser = async (formData) => {
  */
 export const loginUser = async (email, password) => {
   try {
-    if (!supabase) {
-      throw new Error("Supabase client is not initialized");
-    }
+    const { user: formattedUser } = await api.login(email, password);
 
-    // Query user by email
-    const { data: user, error: fetchError } = await supabase
-      .from("users")
-      .select("*")
-      .eq("email", email)
-      .single();
-
-    if (fetchError) {
-      console.error("❌ Error fetching user:", fetchError);
+    if (!formattedUser) {
       return {
         success: false,
         user: null,
@@ -230,51 +158,6 @@ export const loginUser = async (email, password) => {
       };
     }
 
-    if (!user) {
-      return {
-        success: false,
-        user: null,
-        error: "Invalid email or password",
-      };
-    }
-
-    // Verify password hash
-    if (!user.password_hash) {
-      return {
-        success: false,
-        user: null,
-        error: "Invalid email or password",
-      };
-    }
-
-    const isPasswordValid = await verifyPassword(password, user.password_hash);
-    if (!isPasswordValid) {
-      return {
-        success: false,
-        user: null,
-        error: "Invalid email or password",
-      };
-    }
-
-    // Format user data for app use
-    const formattedUser = {
-      id: user.id,
-      name: `${user.first_name} ${user.last_name}`,
-      firstName: user.first_name,
-      lastName: user.last_name,
-      email: user.email,
-      phoneNumber: user.phone_number,
-      address: {
-        address: user.address,
-        city: user.city,
-        state: user.state,
-        country: user.country,
-        postalCode: user.postal_code,
-      },
-      createdAt: user.created_at,
-    };
-
-    // Store in AsyncStorage for local access
     await AsyncStorage.setItem(AUTH_KEY, "authenticated");
     await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(formattedUser));
 
@@ -289,7 +172,7 @@ export const loginUser = async (email, password) => {
     return {
       success: false,
       user: null,
-      error: error.message || "Failed to login",
+      error: error?.data?.error || error.message || "Invalid email or password",
     };
   }
 };
