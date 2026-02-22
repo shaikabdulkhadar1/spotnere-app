@@ -11,6 +11,9 @@ const API_BASE = (
   "http://localhost:5001"
 ).replace(/\/$/, "");
 
+// TEMP: remove after debugging
+console.log("[Vendor API] Base URL:", API_BASE);
+
 async function request(method, path, body = null, query = null) {
   let url = `${API_BASE}${path}`;
   if (query && Object.keys(query).length > 0) {
