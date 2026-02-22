@@ -17,7 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
 import { useApp } from "../contexts/AppContext";
-import { supabase } from "../config/supabase";
+import { api } from "../api/client";
 
 const PaymentInfoScreen = ({ onBack }) => {
   const { user } = useApp();
@@ -45,19 +45,7 @@ const PaymentInfoScreen = ({ onBack }) => {
         setLoading(true);
         setError(null);
 
-        const { data, error } = await supabase
-          .from("vendors")
-          .select(
-            "account_holder_name, account_number, ifsc_code, upi_id",
-          )
-          .eq("id", user.id)
-          .single();
-
-        if (error) {
-          throw error;
-        }
-
-        const info = data || {};
+        const info = await api.getVendorProfile(user.id) || {};
         setPaymentInfo(info);
         setEditForm({
           account_holder_name: info.account_holder_name || "",

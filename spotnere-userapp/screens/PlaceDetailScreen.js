@@ -715,15 +715,6 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
               <Ionicons name="globe-outline" size={18} color={colors.primary} />
               <Text style={styles.quickBtnText}>Website</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.quickBtn}
-              onPress={callPhone}
-              activeOpacity={0.9}
-            >
-              <Ionicons name="call-outline" size={18} color={colors.primary} />
-              <Text style={styles.quickBtnText}>Call</Text>
-            </TouchableOpacity>
           </View>
 
           {/* About */}

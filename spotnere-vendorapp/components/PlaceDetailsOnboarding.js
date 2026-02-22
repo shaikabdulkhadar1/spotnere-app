@@ -22,7 +22,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
-import { supabase } from "../config/supabase";
+import { api } from "../api/client";
 import { useApp } from "../contexts/AppContext";
 
 const DAYS_OF_WEEK = [
@@ -188,28 +188,16 @@ const PlaceDetailsOnboarding = ({ onComplete, onNext }) => {
         }
       });
 
-      // Prepare update data
-      // Amenities: stored as text[] (array)
-      // Hours: stored as jsonb (JSON object)
       const updateData = {
         website: formData.website.trim(),
         location_map_link: formData.map_url.trim(),
         avg_price: parseFloat(formData.avg_price),
         description: formData.description.trim(),
-        amenities: formData.amenities, // Array for text[] column
-        hours: hoursJsonb, // JSON object for jsonb column
-        updated_at: new Date().toISOString(),
+        amenities: formData.amenities,
+        hours: hoursJsonb,
       };
 
-      // Update place in database
-      const { error } = await supabase
-        .from("places")
-        .update(updateData)
-        .eq("id", user.place_id);
-
-      if (error) {
-        throw error;
-      }
+      await api.updateVendorPlace(user.place_id, updateData);
 
       // Onboarding is considered completed when place details are saved
       // No need to update a flag - the presence of data indicates completion

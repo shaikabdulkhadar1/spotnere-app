@@ -20,7 +20,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
-import { supabase } from "../config/supabase";
+import { api } from "../api/client";
 import { useApp } from "../contexts/AppContext";
 
 const BankDetailsOnboarding = ({ onComplete }) => {
@@ -88,24 +88,14 @@ const BankDetailsOnboarding = ({ onComplete }) => {
     setIsSubmitting(true);
 
     try {
-      // Prepare update data
       const updateData = {
         account_holder_name: formData.account_holder_name.trim(),
         account_number: formData.account_number.trim(),
         ifsc_code: formData.ifsc_code.trim().toUpperCase(),
         upi_id: formData.upi_id.trim(),
-        updated_at: new Date().toISOString(),
       };
 
-      // Update vendor in database
-      const { error } = await supabase
-        .from("vendors")
-        .update(updateData)
-        .eq("id", user.id);
-
-      if (error) {
-        throw error;
-      }
+      await api.updateVendorProfile(user.id, updateData);
 
       // Refresh user data
       await refreshData();

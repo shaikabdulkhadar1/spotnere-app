@@ -20,7 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
 import { useApp } from "../contexts/AppContext";
-import { supabase } from "../config/supabase";
+import { api } from "../api/client";
 import { Country, State, City } from "country-state-city";
 
 const ManageProfileScreen = ({ onBack }) => {
@@ -100,27 +100,8 @@ const ManageProfileScreen = ({ onBack }) => {
     }
 
     try {
-      // Fetch vendor details ONLY from vendors table
-      // NOTE: business_phone_number is stored in places table, not vendors table
-      const { data: vendorData, error } = await supabase
-        .from("vendors")
-        .select(
-          "id, business_name, vendor_full_name, vendor_phone_number, vendor_email, vendor_address, vendor_city, vendor_state, vendor_country, vendor_postal_code"
-        )
-        .eq("id", user.id)
-        .single();
-
-      if (error) {
-        console.error("Error fetching vendor data:", error);
-        // Fallback to user data from context if fetch fails
-        if (user) {
-          initializeFormData(user);
-        }
-        return;
-      }
-
+      const vendorData = await api.getVendorProfile(user.id);
       if (vendorData) {
-        // Initialize form data with vendor data from vendors table
         initializeFormData(vendorData);
       }
     } catch (error) {
@@ -203,14 +184,7 @@ const ManageProfileScreen = ({ onBack }) => {
         vendor_postal_code: editFormData.vendor_postal_code || null,
       };
 
-      const { error } = await supabase
-        .from("vendors")
-        .update(updateData)
-        .eq("id", user.id);
-
-      if (error) {
-        throw error;
-      }
+      await api.updateVendorProfile(user.id, updateData);
 
       Alert.alert("Success", "Profile updated successfully");
       setIsEditing(false);

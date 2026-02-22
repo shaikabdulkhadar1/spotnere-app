@@ -6,7 +6,7 @@
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
-import { supabase } from "../config/supabase";
+import { api } from "../api/client";
 
 // Configure how notifications are handled when app is in foreground
 Notifications.setNotificationHandler({
@@ -71,10 +71,6 @@ export async function registerAndStorePushToken(vendorId) {
     return { success: false, error: "Vendor ID is required" };
   }
 
-  if (!supabase) {
-    return { success: false, error: "Supabase client not initialized" };
-  }
-
   try {
     const permissionsGranted = await requestPermissions();
     if (!permissionsGranted) {
@@ -86,16 +82,7 @@ export async function registerAndStorePushToken(vendorId) {
       return { success: false, error: "Could not get push token" };
     }
 
-    const { error } = await supabase
-      .from("vendors")
-      .update({ push_token: token })
-      .eq("id", vendorId);
-
-    if (error) {
-      console.error("Error storing push token:", error);
-      return { success: false, error: error.message };
-    }
-
+    await api.updatePushToken(vendorId, token);
     return { success: true };
   } catch (error) {
     console.error("Error registering push token:", error);
@@ -116,21 +103,8 @@ export async function clearPushToken(vendorId) {
     return { success: false, error: "Vendor ID is required" };
   }
 
-  if (!supabase) {
-    return { success: false, error: "Supabase client not initialized" };
-  }
-
   try {
-    const { error } = await supabase
-      .from("vendors")
-      .update({ push_token: null })
-      .eq("id", vendorId);
-
-    if (error) {
-      console.error("Error clearing push token:", error);
-      return { success: false, error: error.message };
-    }
-
+    await api.updatePushToken(vendorId, null);
     return { success: true };
   } catch (error) {
     console.error("Error clearing push token:", error);

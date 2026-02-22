@@ -13,6 +13,7 @@ import React, {
 import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getCurrentUser } from "../utils/auth";
+import { api } from "../api/client";
 import { supabase } from "../config/supabase";
 import { useToast } from "./ToastContext";
 
@@ -137,82 +138,9 @@ export const AppProvider = ({ children }) => {
           }
         }
 
-        // Fetch fresh data
         setBookingsData((prev) => ({ ...prev, loading: true }));
 
-        const { data: bookings, error } = await supabase
-          .from("bookings")
-          .select("*")
-          .eq("place_id", user.place_id);
-
-        if (error) {
-          console.error("Error fetching bookings:", error);
-          setBookingsData({
-            total: 0,
-            pending: 0,
-            today: 0,
-            loading: false,
-            bookings: [],
-          });
-          return;
-        }
-
-        // Fetch user details for each booking
-        const bookingsWithUserDetails = await Promise.all(
-          (bookings || []).map(async (booking) => {
-            if (!booking.user_id) {
-              return {
-                ...booking,
-                user_first_name: null,
-                user_last_name: null,
-                user_phone_number: null,
-                user_email: null,
-              };
-            }
-
-            try {
-              const { data: userData, error: userError } = await supabase
-                .from("users")
-                .select("first_name, last_name, phone_number, email")
-                .eq("id", booking.user_id)
-                .single();
-
-              if (userError) {
-                console.error(
-                  `Error fetching user ${booking.user_id}:`,
-                  userError
-                );
-                return {
-                  ...booking,
-                  user_first_name: null,
-                  user_last_name: null,
-                  user_phone_number: null,
-                  user_email: null,
-                };
-              }
-
-              return {
-                ...booking,
-                user_first_name: userData?.first_name || null,
-                user_last_name: userData?.last_name || null,
-                user_phone_number: userData?.phone_number || null,
-                user_email: userData?.email || null,
-              };
-            } catch (err) {
-              console.error(
-                `Error processing user for booking ${booking.id}:`,
-                err
-              );
-              return {
-                ...booking,
-                user_first_name: null,
-                user_last_name: null,
-                user_phone_number: null,
-                user_email: null,
-              };
-            }
-          })
-        );
+        const bookingsWithUserDetails = await api.getVendorBookings(user.place_id);
 
         const totalBookings = bookingsWithUserDetails?.length || 0;
 
@@ -328,19 +256,9 @@ export const AppProvider = ({ children }) => {
 
         setReviewsData((prev) => ({ ...prev, loading: true, error: null }));
 
-        // Fetch base reviews (schema: user_id, place_id, review, rating)
-        const { data: reviewData, error: fetchError } = await supabase
-          .from("reviews")
-          .select("user_id, place_id, review, rating")
-          .eq("place_id", user.place_id);
+        const { reviews, summary } = await api.getVendorReviews(user.place_id);
 
-        if (fetchError) {
-          throw fetchError;
-        }
-
-        const reviews = reviewData || [];
-
-        if (reviews.length === 0) {
+        if (!reviews || reviews.length === 0) {
           const emptyPayload = {
             reviews: [],
             summary: { average: 0, count: 0 },
@@ -361,42 +279,9 @@ export const AppProvider = ({ children }) => {
           return;
         }
 
-        // Fetch user details for all unique user_ids
-        const userIds = Array.from(
-          new Set(reviews.map((r) => r.user_id).filter(Boolean)),
-        );
-
-        let usersMap = {};
-        if (userIds.length > 0) {
-          const { data: usersData, error: usersError } = await supabase
-            .from("users")
-            .select("id, first_name, last_name, email")
-            .in("id", userIds);
-
-          if (usersError) {
-            throw usersError;
-          }
-
-          (usersData || []).forEach((u) => {
-            usersMap[u.id] = u;
-          });
-        }
-
-        const merged = reviews.map((review) => ({
-          ...review,
-          user: usersMap[review.user_id] || null,
-        }));
-
-        const count = merged.length;
-        const totalRating = merged.reduce(
-          (sum, r) => sum + (r.rating || 0),
-          0,
-        );
-        const average = count > 0 ? totalRating / count : 0;
-
         const payload = {
-          reviews: merged,
-          summary: { average, count },
+          reviews,
+          summary: summary || { average: 0, count: reviews.length },
         };
 
         setReviewsData({
@@ -432,13 +317,7 @@ export const AppProvider = ({ children }) => {
       const vid = vendorId ?? user?.id;
       if (!vid) return;
       try {
-        const { error } = await supabase
-          .from("vendor_notifications")
-          .update({ is_read: true })
-          .eq("vendor_id", vid)
-          .eq("is_read", false);
-
-        if (error) throw error;
+        await api.markNotificationsRead(vid);
 
         // Update local state and cache
         setNotificationsData((prev) => {
@@ -473,18 +352,7 @@ export const AppProvider = ({ children }) => {
 
         setNotificationsData((prev) => ({ ...prev, loading: true, error: null }));
 
-        const { data: notifications, error } = await supabase
-          .from("vendor_notifications")
-          .select("id, vendor_id, place_id, booking_id, type, title, body, is_read, created_at")
-          .eq("vendor_id", vid)
-          .order("created_at", { ascending: false });
-
-        if (error) {
-          throw error;
-        }
-
-        const list = notifications || [];
-        const unreadCount = list.filter((n) => n.is_read === false).length;
+        const { notifications: list, unreadCount } = await api.getVendorNotifications(vid);
 
         setNotificationsData({
           notifications: list,
@@ -553,15 +421,9 @@ export const AppProvider = ({ children }) => {
         if (!placeCacheHit) {
           // Cache miss - fetch fresh place data directly
           try {
-            const { data, error } = await supabase
-              .from("places")
-              .select("*")
-              .eq("id", currentUserData.place_id)
-              .single();
+            const data = await api.getVendorPlace(currentUserData.place_id);
 
-            if (error) {
-              console.error("Error fetching place data:", error);
-            } else if (data) {
+            if (data) {
               setPlaceData(data);
               // Cache place details only (exclude banner_image_link)
               const { banner_image_link: _b, ...placeForCache } = data;
@@ -636,14 +498,10 @@ export const AppProvider = ({ children }) => {
           const parsedPlace = JSON.parse(cachedPlace);
           const placeId = parsedPlace?.id;
           if (placeId) {
-            const { data: bannerData } = await supabase
-              .from("places")
-              .select("banner_image_link")
-              .eq("id", placeId)
-              .single();
+            const placeFull = await api.getVendorPlace(placeId);
             setPlaceData({
               ...parsedPlace,
-              banner_image_link: bannerData?.banner_image_link ?? null,
+              banner_image_link: placeFull?.banner_image_link ?? null,
             });
           } else {
             setPlaceData(parsedPlace);
@@ -663,12 +521,7 @@ export const AppProvider = ({ children }) => {
     const placeId = user?.place_id || placeData?.id;
     if (!placeId) return;
     try {
-      const { data, error } = await supabase
-        .from("places")
-        .select("banner_image_link")
-        .eq("id", placeId)
-        .single();
-      if (error) throw error;
+      const data = await api.getVendorPlace(placeId);
       if (data) {
         setPlaceData((prev) =>
           prev ? { ...prev, banner_image_link: data.banner_image_link } : prev
@@ -698,16 +551,7 @@ export const AppProvider = ({ children }) => {
         }
 
         // Fetch fresh place data
-        const { data, error } = await supabase
-          .from("places")
-          .select("*")
-          .eq("id", user.place_id)
-          .single();
-
-        if (error) {
-          console.error("Error fetching place data:", error);
-          return;
-        }
+        const data = await api.getVendorPlace(user.place_id);
 
         if (data) {
           setPlaceData(data);

@@ -18,8 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
 import { useApp } from "../contexts/AppContext";
-import { supabase } from "../config/supabase";
-import { hashPassword, verifyPassword } from "../utils/auth";
+import { api } from "../api/client";
 
 const PasswordSecurityScreen = ({ onBack }) => {
   const { user } = useApp();
@@ -72,41 +71,7 @@ const PasswordSecurityScreen = ({ onBack }) => {
 
     setIsSaving(true);
     try {
-      // First, verify the current password
-      const { data: vendorData, error: fetchError } = await supabase
-        .from("vendors")
-        .select("password_hash")
-        .eq("id", user.id)
-        .single();
-
-      if (fetchError || !vendorData) {
-        throw new Error("Failed to verify current password");
-      }
-
-      // Verify current password
-      const isValid = await verifyPassword(
-        currentPassword,
-        vendorData.password_hash
-      );
-
-      if (!isValid) {
-        setErrors({ currentPassword: "Current password is incorrect" });
-        setIsSaving(false);
-        return;
-      }
-
-      // Hash the new password
-      const newPasswordHash = await hashPassword(newPassword);
-
-      // Update password in database
-      const { error: updateError } = await supabase
-        .from("vendors")
-        .update({ password_hash: newPasswordHash })
-        .eq("id", user.id);
-
-      if (updateError) {
-        throw updateError;
-      }
+      await api.updateVendorPassword(user.id, currentPassword, newPassword);
 
       Alert.alert("Success", "Password updated successfully", [
         {
@@ -125,10 +90,12 @@ const PasswordSecurityScreen = ({ onBack }) => {
       ]);
     } catch (error) {
       console.error("Error updating password:", error);
-      Alert.alert(
-        "Error",
-        error.message || "Failed to update password. Please try again."
-      );
+      const msg = error?.data?.error || error.message || "Failed to update password. Please try again.";
+      if (msg.toLowerCase().includes("current password")) {
+        setErrors({ currentPassword: "Current password is incorrect" });
+      } else {
+        Alert.alert("Error", msg);
+      }
     } finally {
       setIsSaving(false);
     }

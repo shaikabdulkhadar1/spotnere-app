@@ -128,125 +128,70 @@ function AppContent() {
   const checkOnboardingStatus = async () => {
     setCheckingOnboarding(true);
     try {
-      // Get fresh user data from context
-      // If user is not available yet, try to get it directly
       let currentUser = user;
-      
-      // If user is not in context yet, fetch it directly
       if (!currentUser?.id) {
         const { getCurrentUser } = require("./utils/auth");
         currentUser = await getCurrentUser();
       }
-      
       if (!currentUser?.id) {
         setCheckingOnboarding(false);
         return;
       }
 
-      const { supabase } = require("./config/supabase");
+      const { api } = require("./api/client");
+      const { placeDetailsComplete, bankDetailsComplete } =
+        await api.getOnboardingStatus(currentUser.id);
 
-      // Check place details onboarding status
-      // For new users, place_id should exist but place details might be empty
-      if (currentUser?.place_id) {
-        const { data: placeData, error: placeError } = await supabase
-          .from("places")
-          .select("description, website, hours, avg_price, amenities, location_map_link")
-          .eq("id", currentUser.place_id)
-          .single();
-
-        if (placeError) {
-          console.error("Error fetching place data:", placeError);
-          // If place doesn't exist, show place onboarding
-          setShowPlaceOnboarding(true);
-          setCheckingOnboarding(false);
-          return;
-        }
-
-        if (placeData) {
-          // Check if any of the key fields are filled
-          // hours can be JSONB (object) or string
-          const hasHours = placeData.hours && (
-            (typeof placeData.hours === "object" && Object.keys(placeData.hours).length > 0) ||
-            (typeof placeData.hours === "string" && placeData.hours.trim())
-          );
-          
-          const hasPlaceDetails =
-            (placeData.description && placeData.description.trim()) ||
-            (placeData.website && placeData.website.trim()) ||
-            (placeData.location_map_link && placeData.location_map_link.trim()) ||
-            hasHours ||
-            placeData.avg_price ||
-            (placeData.amenities &&
-              Array.isArray(placeData.amenities) &&
-              placeData.amenities.length > 0);
-
-          if (!hasPlaceDetails) {
-            setShowPlaceOnboarding(true);
-            setCheckingOnboarding(false);
-            return;
-          }
-        } else {
-          // No place data found, show onboarding
-          setShowPlaceOnboarding(true);
-          setCheckingOnboarding(false);
-          return;
-        }
-      } else {
-        // No place_id means place wasn't created, but this shouldn't happen
-        // Still show place onboarding as fallback
+      // Show bank onboarding first (right after registration), then place details
+      if (!bankDetailsComplete) {
+        setShowBankOnboarding(true);
+      } else if (!placeDetailsComplete) {
         setShowPlaceOnboarding(true);
-        setCheckingOnboarding(false);
-        return;
-      }
-
-      // Only check bank details if place onboarding is already completed
-      // (Bank onboarding will be triggered directly from handlePlaceOnboardingComplete)
-      // This check is for users who already have place details but missing bank details
-      const { data: vendorData, error: vendorError } = await supabase
-        .from("vendors")
-        .select("account_holder_name, account_number, ifsc_code, upi_id")
-        .eq("id", currentUser.id)
-        .single();
-
-      if (!vendorError && vendorData) {
-        // Check if bank details are filled
-        const hasBankDetails =
-          (vendorData.account_holder_name && vendorData.account_holder_name.trim()) ||
-          (vendorData.account_number && vendorData.account_number.trim()) ||
-          (vendorData.ifsc_code && vendorData.ifsc_code.trim()) ||
-          (vendorData.upi_id && vendorData.upi_id.trim());
-
-        if (!hasBankDetails) {
-          setShowBankOnboarding(true);
-        }
-      } else if (vendorError) {
-        console.error("Error fetching vendor data:", vendorError);
       }
     } catch (error) {
       console.error("Error checking onboarding status:", error);
+      setShowBankOnboarding(true);
     } finally {
       setCheckingOnboarding(false);
     }
   };
 
   const handlePlaceOnboardingComplete = async () => {
-    // Refresh data to get updated place details
-    await refreshData();
-    
-    // Immediately show bank onboarding for new users
-    // (This is called after place onboarding, so user is definitely new)
     setShowPlaceOnboarding(false);
-    
-    // Use setTimeout to ensure state update happens after render cycle
-    setTimeout(() => {
-      setShowBankOnboarding(true);
-    }, 100);
+    await refreshData();
+    // If bank details not yet complete, show bank onboarding
+    const { getCurrentUser } = require("./utils/auth");
+    const { api } = require("./api/client");
+    const currentUser = await getCurrentUser();
+    if (currentUser?.id) {
+      try {
+        const { bankDetailsComplete } = await api.getOnboardingStatus(currentUser.id);
+        if (!bankDetailsComplete) {
+          setTimeout(() => setShowBankOnboarding(true), 100);
+        }
+      } catch (e) {
+        console.warn("Could not check bank onboarding:", e);
+      }
+    }
   };
 
   const handleBankOnboardingComplete = async () => {
     setShowBankOnboarding(false);
-    // Refresh data to get updated vendor details
     await refreshData();
+    // Show place onboarding next if not yet complete
+    const { getCurrentUser } = require("./utils/auth");
+    const { api } = require("./api/client");
+    const currentUser = await getCurrentUser();
+    if (currentUser?.id) {
+      try {
+        const { placeDetailsComplete } = await api.getOnboardingStatus(currentUser.id);
+        if (!placeDetailsComplete) {
+          setTimeout(() => setShowPlaceOnboarding(true), 100);
+        }
+      } catch (e) {
+        console.warn("Could not check place onboarding:", e);
+      }
+    }
   };
 
   const handleLogout = async () => {

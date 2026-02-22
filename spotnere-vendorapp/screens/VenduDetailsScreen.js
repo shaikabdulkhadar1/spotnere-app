@@ -20,10 +20,9 @@ import {
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { decode } from "base64-arraybuffer";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
-import { supabase } from "../config/supabase";
+import { api } from "../api/client";
 import { Country, State, City } from "country-state-city";
 import { useApp } from "../contexts/AppContext";
 
@@ -80,13 +79,8 @@ const VenduDetailsScreen = () => {
     const placeId = user?.place_id || placeData?.id;
     if (!placeId) return;
     try {
-      const { data, error } = await supabase
-        .from("gallery_images")
-        .select("id, gallery_image_url")
-        .eq("place_id", placeId)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      setGalleryImages(data || []);
+      const data = await api.getVendorGallery(placeId);
+      setGalleryImages(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Error loading gallery:", err);
     }
@@ -290,38 +284,19 @@ const VenduDetailsScreen = () => {
     setIsUploadingBanner(true);
     try {
       const placeId = user.place_id;
-
-      // Delete old banner from storage if it exists
       const oldBannerUrl = placeData?.banner_image_link;
       if (oldBannerUrl) {
-        const pathMatch = oldBannerUrl.match(/places_images\/(.+)$/);
+        const pathMatch = oldBannerUrl.match(/places_images\/(.+?)(?:\?|$)/);
         if (pathMatch?.[1]) {
-          const oldPath = decodeURIComponent(pathMatch[1]);
-          await supabase.storage.from("places_images").remove([oldPath]);
+          const oldPath = decodeURIComponent(pathMatch[1].split("?")[0]);
+          try {
+            await api.removeStoragePaths([oldPath]);
+          } catch (e) {
+            console.warn("Could not remove old banner:", e);
+          }
         }
       }
-
-      const fileName = `${placeId}/banner-${placeId}-${Date.now()}.jpg`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("places_images")
-        .upload(fileName, decode(bannerPreviewBase64), {
-          contentType: "image/jpeg",
-          upsert: true,
-        });
-      if (uploadError) {
-        throw uploadError;
-      }
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("places_images").getPublicUrl(uploadData.path);
-      const { error: updateError } = await supabase
-        .from("places")
-        .update({
-          banner_image_link: publicUrl,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", placeId);
-      if (updateError) throw updateError;
+      await api.uploadBanner(placeId, bannerPreviewBase64);
       await loadPlace(true);
       setShowBannerPreviewModal(false);
       setBannerPreviewUri(null);
@@ -367,34 +342,11 @@ const VenduDetailsScreen = () => {
     setIsUploadingGallery(true);
     try {
       const placeId = user.place_id;
-      const urls = [];
-      for (let i = 0; i < galleryPreviewItems.length; i++) {
-        const item = galleryPreviewItems[i];
-        if (!item.base64) continue;
-        const fileName = `${placeId}/gallery-${placeId}-${Date.now()}.jpg`;
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from("places_images")
-          .upload(fileName, decode(item.base64), {
-            contentType: "image/jpeg",
-            upsert: false,
-          });
-        if (uploadError) throw uploadError;
-        const {
-          data: { publicUrl },
-        } = supabase.storage
-          .from("places_images")
-          .getPublicUrl(uploadData.path);
-        urls.push(publicUrl);
-      }
-      const { error: insertError } = await supabase
-        .from("gallery_images")
-        .insert(
-          urls.map((gallery_image_url) => ({
-            place_id: placeId,
-            gallery_image_url,
-          })),
-        );
-      if (insertError) throw insertError;
+      const images = galleryPreviewItems
+        .map((item) => item.base64)
+        .filter(Boolean);
+      if (images.length === 0) return;
+      await api.uploadGallery(placeId, images);
       await loadGalleryImages();
       setShowGalleryPreviewModal(false);
       setGalleryPreviewItems([]);
@@ -441,24 +393,18 @@ const VenduDetailsScreen = () => {
                 .map((item) => {
                   const url = item.gallery_image_url;
                   if (!url) return null;
-                  const path =
-                    url.split("places_images/")[1] || url.split("/").pop();
-                  return path;
+                  const raw = url.split("places_images/")[1] || url.split("/").pop();
+                  return raw ? raw.split("?")[0] : null;
                 })
                 .filter(Boolean);
               if (storagePaths.length > 0) {
-                const { error: storageError } = await supabase.storage
-                  .from("places_images")
-                  .remove(storagePaths);
-                if (storageError) {
-                  console.warn("Storage delete warning:", storageError);
+                try {
+                  await api.removeStoragePaths(storagePaths);
+                } catch (e) {
+                  console.warn("Storage delete warning:", e);
                 }
               }
-              const { error } = await supabase
-                .from("gallery_images")
-                .delete()
-                .in("id", selectedImageIds);
-              if (error) throw error;
+              await api.deleteGalleryImages(selectedImageIds);
               setSelectedImageIds([]);
               setIsDeleteMode(false);
               await loadGalleryImages();
@@ -556,22 +502,11 @@ const VenduDetailsScreen = () => {
         avg_price: editFormData.avg_price
           ? parseFloat(editFormData.avg_price)
           : null,
-        hours: parseHoursInput(editFormData.hours), // Convert string to JSONB
-        amenities: parseAmenitiesInput(editFormData.amenities), // Already an array
-        updated_at: new Date().toISOString(),
-        last_updated: new Date().toISOString(),
+        hours: parseHoursInput(editFormData.hours),
+        amenities: parseAmenitiesInput(editFormData.amenities),
       };
 
-      const { data, error } = await supabase
-        .from("places")
-        .update(updateData)
-        .eq("id", placeId)
-        .select()
-        .single();
-
-      if (error) {
-        throw error;
-      }
+      await api.updateVendorPlace(placeId, updateData);
 
       setIsEditing(false);
       Alert.alert("Success", "Place details updated successfully!");
