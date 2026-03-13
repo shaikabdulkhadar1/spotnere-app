@@ -483,6 +483,9 @@ app.post("/payments/razorpay/create-order", async (req, res) => {
  * Verifies signature + fetches payment status from Razorpay + updates bookings.
  */
 app.post("/payments/razorpay/verify", async (req, res) => {
+  const log = (msg, data) =>
+    console.log("[verify]", msg, data !== undefined ? JSON.stringify(data) : "");
+
   try {
     const {
       bookingId,
@@ -491,9 +494,25 @@ app.post("/payments/razorpay/verify", async (req, res) => {
       razorpay_signature,
     } = req.body;
 
-    if (!bookingId)
+    log("request received", {
+      bookingId,
+      razorpay_order_id: razorpay_order_id || null,
+      razorpay_payment_id: razorpay_payment_id || null,
+      razorpay_signature: razorpay_signature
+        ? `present, length=${razorpay_signature.length}`
+        : "missing",
+    });
+
+    log("RAZORPAY_KEY_SECRET exists", {
+      exists: !!process.env.RAZORPAY_KEY_SECRET,
+    });
+
+    if (!bookingId) {
+      log("error: bookingId required");
       return res.status(400).json({ error: "bookingId is required" });
+    }
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      log("error: missing Razorpay fields");
       return res.status(400).json({ error: "Missing Razorpay fields" });
     }
 
@@ -503,6 +522,7 @@ app.post("/payments/razorpay/verify", async (req, res) => {
       paymentId: razorpay_payment_id,
       signature: razorpay_signature,
     });
+    log("signature comparison result", { sigOk });
 
     if (!sigOk) {
       await updateBookingById(bookingId, {
@@ -517,48 +537,101 @@ app.post("/payments/razorpay/verify", async (req, res) => {
         .json({ status: "FAILED", reason: "Signature mismatch" });
     }
 
-    // 2) Fetch payment from Razorpay (extra safety)
-    const payment = await razorpay.payments.fetch(razorpay_payment_id);
+    // 2) Fetch payment from Razorpay (extra safety); if fetch fails, trust signature
+    let payment = null;
+    try {
+      payment = await razorpay.payments.fetch(razorpay_payment_id);
+      log("Razorpay fetch ok", { status: payment?.status });
+    } catch (fetchErr) {
+      log("Razorpay fetch failed (trusting signature)", {
+        message: fetchErr?.message,
+        code: fetchErr?.code,
+      });
+    }
 
-    const finalStatus =
-      payment.status === "captured"
+    const finalStatus = payment
+      ? payment.status === "captured"
         ? "SUCCESS"
         : payment.status === "failed"
           ? "FAILED"
-          : "PENDING";
+          : "PENDING"
+      : "SUCCESS"; // signature valid => trust payment succeeded
 
-    // 3) Update booking
-    const booking = await updateBookingById(bookingId, {
+    log("updating booking", { finalStatus });
+
+    const fullPatch = {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
       transaction_id: razorpay_payment_id,
-      payment_method: payment.method || null,
+      payment_method: payment?.method || null,
       payment_status: finalStatus,
       paid_at: finalStatus === "SUCCESS" ? new Date().toISOString() : null,
       amount_received_by_vendor:
-        finalStatus === "SUCCESS" ? Number(payment.amount) / 100 : null,
+        finalStatus === "SUCCESS" && payment?.amount
+          ? Number(payment.amount) / 100
+          : null,
       payment_error:
         finalStatus === "FAILED"
-          ? payment.error_description || "Payment failed"
+          ? payment?.error_description || "Payment failed"
           : null,
-    });
+    };
 
-    if (finalStatus === "SUCCESS" && booking) {
-      await insertVendorNotificationForBooking(booking);
+    let booking;
+    try {
+      booking = await updateBookingById(bookingId, fullPatch);
+    } catch (updateErr) {
+      log("DB update failed (full patch)", {
+        error: updateErr?.message,
+        code: updateErr?.code,
+        details: updateErr?.details,
+      });
+      try {
+        const minimalPatch = {
+          razorpay_order_id,
+          razorpay_payment_id,
+          transaction_id: razorpay_payment_id,
+          payment_status: finalStatus,
+        };
+        if (finalStatus === "SUCCESS") {
+          minimalPatch.paid_at = new Date().toISOString();
+        }
+        booking = await updateBookingById(bookingId, minimalPatch);
+      } catch (minimalErr) {
+        log("DB update failed (minimal patch)", {
+          error: minimalErr?.message,
+          code: minimalErr?.code,
+          details: minimalErr?.details,
+        });
+        throw minimalErr;
+      }
     }
 
+    if (finalStatus === "SUCCESS" && booking) {
+      try {
+        await insertVendorNotificationForBooking(booking);
+      } catch (notifErr) {
+        log("vendor notification failed (non-fatal)", { err: notifErr?.message });
+      }
+    }
+
+    log("verify success", { finalStatus, bookingId: booking?.id });
     return res.json({
       status: finalStatus,
       bookingId: booking.id,
       razorpay_payment_id,
       razorpay_order_id,
-      method: payment.method,
-      gateway_status: payment.status,
+      method: payment?.method,
+      gateway_status: payment?.status,
     });
   } catch (err) {
-    console.error("verify error:", err);
-    return res.status(500).json({ error: "Verification failed" });
+    const errMsg = err?.message || String(err);
+    console.error("[verify] error:", errMsg);
+    console.error("[verify] stack:", err?.stack);
+    return res.status(500).json({
+      error: "Verification failed",
+      details: errMsg,
+    });
   }
 });
 
@@ -1297,12 +1370,10 @@ app.post("/api/vendor/auth/register", async (req, res) => {
       .single();
     if (vendorErr) {
       if (vendorErr.code === "23505") {
-        return res
-          .status(400)
-          .json({
-            error:
-              "An account with this email already exists. Please sign in instead.",
-          });
+        return res.status(400).json({
+          error:
+            "An account with this email already exists. Please sign in instead.",
+        });
       }
       throw vendorErr;
     }
@@ -1408,6 +1479,149 @@ app.post("/api/vendor/auth/login", async (req, res) => {
   } catch (err) {
     console.error("api/vendor/auth/login error:", err);
     return res.status(500).json({ error: err?.message || "Failed to login" });
+  }
+});
+
+/**
+ * POST /api/admin/auth/login
+ * Body: { email, password }
+ * Uses Supabase Auth signInWithPassword.
+ */
+app.post("/api/admin/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    console.log("[Admin] Login attempt for:", email ? `${email.slice(0, 3)}***` : "(no email)");
+    if (!email || !password) {
+      console.warn("[Admin] Login failed: missing email or password");
+      return res.status(400).json({ error: "email and password required" });
+    }
+    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+      email: (email || "").toLowerCase().trim(),
+      password,
+    });
+    if (error) {
+      console.warn("[Admin] Login failed:", error.message);
+      return res.status(401).json({ error: error.message || "Invalid email or password" });
+    }
+    const user = data?.user;
+    if (!user) {
+      console.warn("[Admin] Login failed: no user in response");
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+    console.log("[Admin] Login success:", user.email);
+    return res.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+      },
+    });
+  } catch (err) {
+    console.error("[Admin] Login error:", err?.message, err);
+    return res.status(500).json({ error: err?.message || "Failed to login" });
+  }
+});
+
+/**
+ * GET /api/admin/dashboard/stats
+ * Returns dashboard metrics: vendors, places, bookings, revenue, reviews.
+ */
+app.get("/api/admin/dashboard/stats", async (req, res) => {
+  try {
+    const [vendorsRes, placesRes, bookingsRes, revenueRes, reviewsRes] =
+      await Promise.all([
+        supabaseAdmin.from("vendors").select("*", { count: "exact", head: true }),
+        supabaseAdmin.from("places").select("*", { count: "exact", head: true }),
+        supabaseAdmin.from("bookings").select("*", { count: "exact", head: true }),
+        supabaseAdmin
+          .from("bookings")
+          .select("amount_paid")
+          .in("payment_status", ["PAID", "paid", "COMPLETED", "completed", "SUCCESS", "success"]),
+        supabaseAdmin.from("reviews").select("*", { count: "exact", head: true }),
+      ]);
+
+    const totalRevenue =
+      (revenueRes.data || []).reduce((sum, b) => sum + Number(b.amount_paid || 0), 0) || 0;
+
+    return res.json({
+      vendorsCount: vendorsRes.count ?? 0,
+      placesCount: placesRes.count ?? 0,
+      bookingsCount: bookingsRes.count ?? 0,
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      reviewsCount: reviewsRes.count ?? 0,
+    });
+  } catch (err) {
+    console.error("[Admin] Dashboard stats error:", err?.message);
+    return res
+      .status(500)
+      .json({ error: err?.message || "Failed to fetch dashboard stats" });
+  }
+});
+
+/**
+ * GET /api/admin/dashboard/sales?period=daily|weekly|monthly
+ * Returns sales data for the line chart. Default: daily, last 14 days.
+ */
+app.get("/api/admin/dashboard/sales", async (req, res) => {
+  try {
+    const period = (req.query.period || "daily").toLowerCase();
+    const daysBack = period === "monthly" ? 90 : period === "weekly" ? 42 : 14;
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - daysBack);
+    fromDate.setHours(0, 0, 0, 0);
+
+    const { data: bookings, error } = await supabaseAdmin
+      .from("bookings")
+      .select("amount_paid, paid_at, booking_date_time")
+      .in("payment_status", ["PAID", "paid", "COMPLETED", "completed", "SUCCESS", "success"])
+      .not("amount_paid", "is", null);
+
+    if (error) throw error;
+
+    const byKey = {};
+    const now = new Date();
+    const fmt = (d) => {
+      if (period === "monthly") return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (period === "weekly") {
+        const weekStart = new Date(d);
+        weekStart.setDate(d.getDate() - d.getDay());
+        return `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, "0")}-${String(weekStart.getDate()).padStart(2, "0")}`;
+      }
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    };
+    const labelFmt = (d) => {
+      if (period === "monthly") return `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]} ${d.getMonth() === 0 ? d.getFullYear() : ""}`.trim();
+      if (period === "weekly") return `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]} ${d.getDate()}`;
+      return `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]} ${d.getDate()}`;
+    };
+
+    for (let i = 0; i <= daysBack; i++) {
+      const d = new Date(fromDate);
+      d.setDate(d.getDate() + i);
+      const key = fmt(d);
+      if (!byKey[key]) byKey[key] = { date: d, total: 0 };
+    }
+
+    (bookings || []).forEach((b) => {
+      const ts = b.paid_at || b.booking_date_time;
+      if (!ts) return;
+      const d = new Date(ts);
+      if (d < fromDate) return;
+      const key = fmt(d);
+      if (!byKey[key]) byKey[key] = { date: d, total: 0 };
+      byKey[key].total += Number(b.amount_paid || 0);
+    });
+
+    const keys = Object.keys(byKey).sort();
+    const labels = keys.map((k) => labelFmt(byKey[k].date));
+    const data = keys.map((k) => Math.round(byKey[k].total * 100) / 100);
+
+    return res.json({ labels, data });
+  } catch (err) {
+    console.error("[Admin] Dashboard sales error:", err?.message);
+    return res
+      .status(500)
+      .json({ error: err?.message || "Failed to fetch sales data" });
   }
 });
 
@@ -2007,6 +2221,7 @@ app.post("/api/vendor/storage/remove", async (req, res) => {
 // ---------- Start ----------
 // 404 handler - helps debug Postman 404s
 app.use((req, res) => {
+  console.log("[404]", req.method, req.path);
   res.status(404).json({
     error: "Not found",
     path: req.path,

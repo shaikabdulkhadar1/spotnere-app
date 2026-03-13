@@ -45,7 +45,7 @@ const PaymentInfoScreen = ({ onBack }) => {
         setLoading(true);
         setError(null);
 
-        const info = await api.getVendorProfile(user.id) || {};
+        const info = (await api.getVendorProfile(user.id)) || {};
         setPaymentInfo(info);
         setEditForm({
           account_holder_name: info.account_holder_name || "",
@@ -166,10 +166,7 @@ const PaymentInfoScreen = ({ onBack }) => {
       <View style={styles.fieldRow}>
         <Text style={styles.fieldLabel}>{label}</Text>
         <Text
-          style={[
-            styles.fieldValue,
-            !value && styles.fieldValuePlaceholder,
-          ]}
+          style={[styles.fieldValue, !value && styles.fieldValuePlaceholder]}
           numberOfLines={1}
         >
           {display}
@@ -334,9 +331,7 @@ const PaymentInfoScreen = ({ onBack }) => {
                     autoCapitalize="characters"
                   />
                   {formErrors.ifsc_code && (
-                    <Text style={styles.errorText}>
-                      {formErrors.ifsc_code}
-                    </Text>
+                    <Text style={styles.errorText}>{formErrors.ifsc_code}</Text>
                   )}
                 </View>
 
@@ -348,9 +343,7 @@ const PaymentInfoScreen = ({ onBack }) => {
                       formErrors.upi_id && styles.inputError,
                     ]}
                     value={editForm.upi_id}
-                    onChangeText={(text) =>
-                      handleInputChange("upi_id", text)
-                    }
+                    onChangeText={(text) => handleInputChange("upi_id", text)}
                     placeholder="Enter UPI ID (e.g., name@paytm)"
                     placeholderTextColor={colors.textSecondary}
                     keyboardType="email-address"
@@ -604,4 +597,3 @@ const styles = StyleSheet.create({
 });
 
 export default PaymentInfoScreen;
-

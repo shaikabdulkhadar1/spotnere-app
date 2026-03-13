@@ -1,146 +1,230 @@
-/**
- * Bottom Navigation Bar Component
- * Implements 4 tabs: Home, Bookings, Vendu Details, Profile
- */
-
-import React from "react";
+import React, { useRef, useEffect } from "react";
 import {
   StyleSheet,
   View,
   TouchableOpacity,
-  Text,
   Platform,
+  Animated,
 } from "react-native";
-import { BlurView } from "expo-blur";
-import {
-  LayoutDashboard,
-  CalendarDays,
-  Store,
-  User,
-} from "lucide-react-native";
+import { CalendarDays, Store, User, Home } from "lucide-react-native";
 import { colors } from "../constants/colors";
-import { fonts } from "../constants/fonts";
+
+const PILL_TABS = [
+  { id: "home", icon: Home },
+  { id: "bookings", icon: CalendarDays },
+  { id: "venduDetails", icon: Store },
+];
+
+const HIGHLIGHT_SIZE = 54;
+const TAB_SIZE = 48;
 
 const BottomNavBar = ({ activeTab, onTabChange }) => {
-  const tabs = [
-    { id: "home", label: "Dashboard", icon: LayoutDashboard },
-    {
-      id: "bookings",
-      label: "Bookings",
-      icon: CalendarDays,
-    },
-    {
-      id: "venduDetails",
-      label: "Vendu Details",
-      icon: Store,
-    },
-    {
-      id: "profile",
-      label: "Profile",
-      icon: User,
-    },
-  ];
+  const translateX = useRef(new Animated.Value(0)).current;
+  const highlightOpacity = useRef(new Animated.Value(1)).current;
+  const tabXPositions = useRef([]);
+  const initializedRef = useRef(false);
 
-  const NavContent = () => (
-    <View style={styles.navContainer}>
-      {tabs.map((tab) => {
-        const isActive = activeTab === tab.id;
-        return (
-          <TouchableOpacity
-            key={tab.id}
-            style={[
-              styles.tab,
-              isActive && styles.activeTab,
-              !isActive && styles.inactiveTab,
-            ]}
-            onPress={() => onTabChange(tab.id)}
-            activeOpacity={0.7}
-          >
-            {React.createElement(tab.icon, {
-              size: 24,
-              color: isActive ? "#ffffff" : colors.primary,
-            })}
-            <Text
-              style={[styles.tabLabel, isActive && styles.activeTabLabel]}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-            >
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
+  const activeIndex = PILL_TABS.findIndex((t) => t.id === activeTab);
+  const isPillActive = activeIndex !== -1;
 
-  if (Platform.OS === "ios") {
-    return (
-      <BlurView intensity={80} style={styles.container} tint="light">
-        <NavContent />
-      </BlurView>
-    );
-  }
+  useEffect(() => {
+    Animated.timing(highlightOpacity, {
+      toValue: isPillActive ? 1 : 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+
+    if (!isPillActive) return;
+
+    const targetX = tabXPositions.current[activeIndex];
+    if (targetX !== undefined) {
+      if (!initializedRef.current) {
+        translateX.setValue(targetX);
+        initializedRef.current = true;
+      } else {
+        Animated.spring(translateX, {
+          toValue: targetX,
+          damping: 18,
+          stiffness: 200,
+          mass: 0.8,
+          useNativeDriver: true,
+        }).start();
+      }
+    }
+  }, [activeTab]);
+
+  const handleTabLayout = (index, event) => {
+    const { x, width } = event.nativeEvent.layout;
+    tabXPositions.current[index] = x + (width - HIGHLIGHT_SIZE) / 2;
+
+    if (index === activeIndex && !initializedRef.current) {
+      translateX.setValue(tabXPositions.current[index]);
+      initializedRef.current = true;
+    }
+  };
+
+  const profileAnim = useRef(
+    new Animated.Value(activeTab === "profile" ? 1 : 0)
+  ).current;
+
+  useEffect(() => {
+    Animated.spring(profileAnim, {
+      toValue: activeTab === "profile" ? 1 : 0,
+      tension: 180,
+      friction: 14,
+      useNativeDriver: true,
+    }).start();
+  }, [activeTab]);
+
+  const profileScale = profileAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.92],
+  });
+
+  const highlightTop = 10 + (TAB_SIZE - HIGHLIGHT_SIZE) / 2;
 
   return (
-    <View style={[styles.container, styles.androidContainer]}>
-      <NavContent />
+    <View style={styles.floatingWrapper}>
+      <View style={styles.pillShadow}>
+        <View style={styles.pillContainer}>
+          <Animated.View
+            style={[
+              styles.activeHighlight,
+              {
+                top: highlightTop,
+                opacity: highlightOpacity,
+                transform: [{ translateX }],
+              },
+            ]}
+          />
+
+          {PILL_TABS.map((tab, index) => (
+            <TouchableOpacity
+              key={tab.id}
+              style={styles.pillTab}
+              onPress={() => onTabChange(tab.id)}
+              activeOpacity={0.7}
+              onLayout={(e) => handleTabLayout(index, e)}
+            >
+              {React.createElement(tab.icon, {
+                size: 28,
+                color: activeTab === tab.id ? colors.primary : "#9CA3AF",
+                strokeWidth: activeTab === tab.id ? 2 : 1.6,
+              })}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <Animated.View
+        style={[styles.circleShadow, { transform: [{ scale: profileScale }] }]}
+      >
+        <TouchableOpacity
+          style={[
+            styles.circleButton,
+            activeTab === "profile" && styles.circleButtonActive,
+          ]}
+          onPress={() => onTabChange("profile")}
+          activeOpacity={0.8}
+        >
+          <User
+            size={24}
+            color="#FFFFFF"
+            strokeWidth={activeTab === "profile" ? 2.2 : 1.8}
+          />
+        </TouchableOpacity>
+      </Animated.View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  floatingWrapper: {
     position: "absolute",
-    bottom: 0,
+    bottom: Platform.OS === "ios" ? 28 : 18,
     left: 0,
     right: 0,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingBottom: Platform.OS === "ios" ? 20 : 10,
-    paddingTop: 10,
-  },
-  androidContainer: {
-    backgroundColor: colors.cardBackground,
-    elevation: 8,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  navContainer: {
     flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    paddingHorizontal: 4,
-  },
-  tab: {
     alignItems: "center",
     justifyContent: "center",
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    minWidth: 0,
-    borderRadius: 12,
-    marginHorizontal: 4,
+    paddingHorizontal: 24,
+    shadowColor: "#000",
   },
-  activeTab: {
+  pillShadow: {
+    marginRight: 12,
+    borderRadius: 30,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 16,
+      },
+      android: {
+        elevation: 14,
+      },
+    }),
+  },
+  pillContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-evenly",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 50,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  pillTab: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: TAB_SIZE,
+    height: TAB_SIZE,
+    borderRadius: 24,
+    marginHorizontal: 6,
+  },
+  activeHighlight: {
+    position: "absolute",
+    left: 0,
+    width: HIGHLIGHT_SIZE,
+    height: HIGHLIGHT_SIZE,
+    borderRadius: HIGHLIGHT_SIZE / 2,
+    backgroundColor: "rgba(11, 87, 208, 0.12)",
+  },
+  circleShadow: {
+    borderRadius: 32,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
+  circleButton: {
+    width: 55,
+    height: 55,
+    borderRadius: 50,
     backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 16,
+      },
+      android: {
+        elevation: 14,
+      },
+    }),
   },
-  inactiveTab: {
-    opacity: 0.6,
-  },
-  tabLabel: {
-    fontSize: 9,
-    fontFamily: fonts.medium,
-    color: colors.textSecondary,
-    marginTop: 4,
-    textAlign: "center",
-    width: "100%",
-    overflow: "hidden",
-  },
-  activeTabLabel: {
-    color: colors.cardBackground,
-    fontFamily: fonts.semiBold,
+  circleButtonActive: {
+    backgroundColor: colors.primary,
   },
 });
 

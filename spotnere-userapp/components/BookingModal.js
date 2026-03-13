@@ -24,10 +24,13 @@ import RazorpayCheckout from "react-native-razorpay";
 
 const { width, height } = Dimensions.get("window");
 
-const API_BASE =
+const API_BASE = (
   process.env.EXPO_PUBLIC_API_BASE_URL ||
   Constants.expoConfig?.extra?.apiBaseUrl ||
-  "http://localhost:5001";
+  "http://localhost:5001"
+)
+  .trim()
+  .replace(/\/$/, "");
 
 const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
   const { refreshBookings } = useBookings();
@@ -381,7 +384,10 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
 
       const res = await fetch(`${API_BASE}/bookings/create-and-order`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
         body: JSON.stringify({
           userId: user.id,
           placeId,
@@ -436,6 +442,7 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
           try {
             await fetch(`${API_BASE}/bookings/${data.bookingId}/cancel`, {
               method: "DELETE",
+              headers: { "ngrok-skip-browser-warning": "true" },
             });
           } catch (e) {
             console.warn("Failed to delete cancelled booking:", e);
@@ -454,40 +461,109 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
       setShowPaymentProcessing(false);
       setPaying(true);
 
-      const verifyRes = await fetch(`${API_BASE}/payments/razorpay/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bookingId: data.bookingId,
-          razorpay_order_id: razorpayData.razorpay_order_id,
-          razorpay_payment_id: razorpayData.razorpay_payment_id,
-          razorpay_signature: razorpayData.razorpay_signature,
-        }),
+      const payload = {
+        bookingId: data.bookingId,
+        razorpay_order_id:
+          razorpayData.razorpay_order_id ?? razorpayData.razorpayOrderId,
+        razorpay_payment_id:
+          razorpayData.razorpay_payment_id ?? razorpayData.razorpayPaymentId,
+        razorpay_signature:
+          razorpayData.razorpay_signature ?? razorpayData.razorpaySignature,
+      };
+
+      const verifyUrl = `${API_BASE}/payments/razorpay/verify`;
+      console.log("[Booking] Razorpay response keys:", Object.keys(razorpayData));
+      console.log("[Booking] Verify URL:", verifyUrl);
+      console.log("[Booking] Payload has all fields:", {
+        order_id: !!payload.razorpay_order_id,
+        payment_id: !!payload.razorpay_payment_id,
+        signature: !!payload.razorpay_signature,
       });
 
-      const verifyData = await verifyRes.json();
+      const verifyRes = await fetch(verifyUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const verifyText = await verifyRes.text();
+      let verifyData = {};
+      try {
+        verifyData = JSON.parse(verifyText);
+      } catch (parseErr) {
+        console.error("[Booking] Verify response not JSON:", parseErr);
+        console.error("[Booking] Raw response:", verifyText?.slice(0, 300));
+      }
+      console.log("[Booking] Verify response:", {
+        status: verifyRes.status,
+        ok: verifyRes.ok,
+        path: verifyData?.path,
+        method: verifyData?.method,
+        dataStatus: verifyData?.status,
+        error: verifyData?.error,
+        details: verifyData?.details,
+      });
+      if (verifyRes.status === 404) {
+        console.error("[Booking] 404 - verify endpoint not found. Check API_BASE and path.");
+      }
 
       if (verifyRes.ok && verifyData.status === "SUCCESS") {
         setShowPaymentProcessing(false);
         await refreshBookings();
         setShowPaymentSuccess(true);
       } else {
+        // Verify failed - poll status in case webhook already updated DB
+        let statusData = null;
+        for (let i = 0; i < 4; i++) {
+          await new Promise((r) => setTimeout(r, 1500));
+          const statusRes = await fetch(
+            `${API_BASE}/payments/razorpay/status?bookingId=${data.bookingId}`,
+            { headers: { "ngrok-skip-browser-warning": "true" } }
+          );
+          if (statusRes.ok) {
+            statusData = await statusRes.json();
+            if (statusData?.payment_status === "SUCCESS") {
+              setShowPaymentProcessing(false);
+              await refreshBookings();
+              setShowPaymentSuccess(true);
+              return;
+            }
+          }
+        }
+
         setShowPaymentProcessing(false);
-        setPaymentFailedMessage(
-          verifyData.reason ||
+        const failMsg = verifyData.details
+          ? `${verifyData.error || "Verification failed"}: ${verifyData.details}`
+          : verifyData.reason ||
             verifyData.error ||
-            verifyData.details ||
-            "Payment could not be completed.",
-        );
+            "Payment could not be completed.";
+        setPaymentFailedMessage(failMsg);
         setShowPaymentFailed(true);
+
+        // Debug: show full response in alert so user can see error without console
+        const debugInfo = [
+          `Status: ${verifyRes.status}`,
+          verifyData.path && `Path: ${verifyData.path}`,
+          verifyData.method && `Method: ${verifyData.method}`,
+          verifyData.error && `Error: ${verifyData.error}`,
+          verifyData.details && `Details: ${verifyData.details}`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        Alert.alert("Debug: Verify Response", debugInfo, [{ text: "OK" }]);
       }
     } catch (err) {
       setShowPaymentProcessing(false);
-      console.error("Create booking error:", err);
       setPaymentFailedMessage(
         err.message || "Failed to create booking. Please try again.",
       );
       setShowPaymentFailed(true);
+      Alert.alert("Debug: Error", `Type: ${err?.name || "Error"}\nMessage: ${err?.message || String(err)}`, [
+        { text: "OK" },
+      ]);
     } finally {
       setPaying(false);
     }
