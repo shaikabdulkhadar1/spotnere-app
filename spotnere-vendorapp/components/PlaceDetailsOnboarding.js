@@ -35,7 +35,7 @@ const DAYS_OF_WEEK = [
   "Sunday",
 ];
 
-// Generate time options (every 30 minutes from 6 AM to 11 PM)
+// Generate time options (every 30 minutes from 12:00 AM to 11:30 PM)
 const generateTimeOptions = () => {
   const times = [];
   // Add "Closed" option at the top
@@ -43,7 +43,7 @@ const generateTimeOptions = () => {
     value: "closed",
     label: "Closed",
   });
-  for (let hour = 6; hour < 24; hour++) {
+  for (let hour = 0; hour < 24; hour++) {
     for (let minute = 0; minute < 60; minute += 30) {
       const h = hour % 12 || 12;
       const ampm = hour < 12 ? "AM" : "PM";

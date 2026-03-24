@@ -2094,12 +2094,13 @@ app.get("/api/vendor/onboarding-status", async (req, res) => {
       return res.json({
         placeDetailsComplete: false,
         bankDetailsComplete: false,
+        preferencesComplete: false,
       });
     }
     const { data: place } = await supabaseAdmin
       .from("places")
       .select(
-        "description, website, hours, avg_price, amenities, location_map_link",
+        "description, website, hours, avg_price, amenities, location_map_link, allow_overlapping_bookings, allow_multiple_hours_booking, charge_per_guest",
       )
       .eq("id", vendor.place_id)
       .single();
@@ -2120,9 +2121,14 @@ app.get("/api/vendor/onboarding-status", async (req, res) => {
       (vendor?.account_number && vendor.account_number.trim()) ||
       (vendor?.ifsc_code && vendor.ifsc_code.trim()) ||
       (vendor?.upi_id && vendor.upi_id.trim());
+    const hasPreferences =
+      place?.allow_overlapping_bookings != null ||
+      place?.allow_multiple_hours_booking != null ||
+      place?.charge_per_guest != null;
     return res.json({
       placeDetailsComplete: !!hasPlaceDetails,
       bankDetailsComplete: !!hasBankDetails,
+      preferencesComplete: !!hasPreferences,
     });
   } catch (err) {
     console.error("api/vendor/onboarding-status error:", err);

@@ -9,6 +9,7 @@ import VenduDetailsScreen from "./screens/VenduDetailsScreen";
 import ProfileScreen from "./screens/ProfileScreen";
 import BottomNavBar from "./components/BottomNavBar";
 import PlaceDetailsOnboarding from "./components/PlaceDetailsOnboarding";
+import PlacePreferencesOnboarding from "./components/PlacePreferencesOnboarding";
 import BankDetailsOnboarding from "./components/BankDetailsOnboarding";
 import ReviewsScreen from "./screens/ReviewsScreen";
 import NotificationsScreen from "./screens/NotificationsScreen";
@@ -20,6 +21,21 @@ import {
   registerAndStorePushToken,
   clearPushToken,
 } from "./utils/pushNotifications";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+/** Persists that this vendor finished preferences onboarding (survives API/cache quirks). */
+const PREF_ONBOARDING_DONE_KEY = "spotnere_vendor_preferences_onboarding_done";
+
+async function isPreferencesOnboardingDone(vendorId, apiSaysComplete) {
+  if (apiSaysComplete) return true;
+  if (!vendorId) return false;
+  try {
+    const stored = await AsyncStorage.getItem(PREF_ONBOARDING_DONE_KEY);
+    return stored === vendorId;
+  } catch {
+    return false;
+  }
+}
 
 function AppContent() {
   const { user, refreshData, clearCache, markAllNotificationsAsRead } = useApp();
@@ -36,6 +52,7 @@ function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showPlaceOnboarding, setShowPlaceOnboarding] = useState(false);
+  const [showPreferencesOnboarding, setShowPreferencesOnboarding] = useState(false);
   const [showBankOnboarding, setShowBankOnboarding] = useState(false);
   const [checkingOnboarding, setCheckingOnboarding] = useState(false);
   const [activeTab, setActiveTab] = useState("home");
@@ -87,7 +104,7 @@ function AppContent() {
 
   useEffect(() => {
     // Check onboarding status when user becomes available
-    if (isAuthenticated && user?.id && !checkingOnboarding && !showPlaceOnboarding && !showBankOnboarding) {
+    if (isAuthenticated && user?.id && !checkingOnboarding && !showPlaceOnboarding && !showPreferencesOnboarding && !showBankOnboarding) {
       checkOnboardingStatus();
     }
   }, [isAuthenticated, user?.id]);
@@ -139,14 +156,21 @@ function AppContent() {
       }
 
       const { api } = require("./api/client");
-      const { placeDetailsComplete, bankDetailsComplete } =
+      const { placeDetailsComplete, bankDetailsComplete, preferencesComplete } =
         await api.getOnboardingStatus(currentUser.id);
 
-      // Show bank onboarding first (right after registration), then place details
+      const prefsDone = await isPreferencesOnboardingDone(
+        currentUser.id,
+        preferencesComplete,
+      );
+
+      // Show bank onboarding first, then place details, then preferences
       if (!bankDetailsComplete) {
         setShowBankOnboarding(true);
       } else if (!placeDetailsComplete) {
         setShowPlaceOnboarding(true);
+      } else if (!prefsDone) {
+        setShowPreferencesOnboarding(true);
       }
     } catch (error) {
       console.error("Error checking onboarding status:", error);
@@ -159,37 +183,61 @@ function AppContent() {
   const handlePlaceOnboardingComplete = async () => {
     setShowPlaceOnboarding(false);
     await refreshData();
-    // If bank details not yet complete, show bank onboarding
     const { getCurrentUser } = require("./utils/auth");
     const { api } = require("./api/client");
     const currentUser = await getCurrentUser();
     if (currentUser?.id) {
       try {
-        const { bankDetailsComplete } = await api.getOnboardingStatus(currentUser.id);
+        const { bankDetailsComplete, preferencesComplete } = await api.getOnboardingStatus(currentUser.id);
+        const prefsDone = await isPreferencesOnboardingDone(
+          currentUser.id,
+          preferencesComplete,
+        );
         if (!bankDetailsComplete) {
           setTimeout(() => setShowBankOnboarding(true), 100);
+        } else if (!prefsDone) {
+          setTimeout(() => setShowPreferencesOnboarding(true), 100);
         }
       } catch (e) {
-        console.warn("Could not check bank onboarding:", e);
+        console.warn("Could not check next onboarding step:", e);
       }
     }
+  };
+
+  const handlePreferencesOnboardingComplete = async () => {
+    try {
+      const { getCurrentUser } = require("./utils/auth");
+      const currentUser = await getCurrentUser();
+      if (currentUser?.id) {
+        await AsyncStorage.setItem(PREF_ONBOARDING_DONE_KEY, currentUser.id);
+      }
+    } catch (e) {
+      console.warn("Could not persist preferences onboarding completion:", e);
+    }
+    setShowPreferencesOnboarding(false);
+    await refreshData();
   };
 
   const handleBankOnboardingComplete = async () => {
     setShowBankOnboarding(false);
     await refreshData();
-    // Show place onboarding next if not yet complete
     const { getCurrentUser } = require("./utils/auth");
     const { api } = require("./api/client");
     const currentUser = await getCurrentUser();
     if (currentUser?.id) {
       try {
-        const { placeDetailsComplete } = await api.getOnboardingStatus(currentUser.id);
+        const { placeDetailsComplete, preferencesComplete } = await api.getOnboardingStatus(currentUser.id);
+        const prefsDone = await isPreferencesOnboardingDone(
+          currentUser.id,
+          preferencesComplete,
+        );
         if (!placeDetailsComplete) {
           setTimeout(() => setShowPlaceOnboarding(true), 100);
+        } else if (!prefsDone) {
+          setTimeout(() => setShowPreferencesOnboarding(true), 100);
         }
       } catch (e) {
-        console.warn("Could not check place onboarding:", e);
+        console.warn("Could not check next onboarding step:", e);
       }
     }
   };
@@ -299,6 +347,8 @@ function AppContent() {
                   onNext={handlePlaceOnboardingComplete}
                   onComplete={handlePlaceOnboardingComplete}
                 />
+              ) : showPreferencesOnboarding ? (
+                <PlacePreferencesOnboarding onComplete={handlePreferencesOnboardingComplete} />
               ) : showBankOnboarding ? (
                 <BankDetailsOnboarding onComplete={handleBankOnboardingComplete} />
               ) : (

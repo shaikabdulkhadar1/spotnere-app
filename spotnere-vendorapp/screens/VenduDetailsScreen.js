@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  Switch,
 } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -37,6 +38,24 @@ const DAYS_OF_WEEK = [
   "Saturday",
   "Sunday",
 ];
+
+const generateTimeOptions = () => {
+  const times = [{ value: "closed", label: "Closed" }];
+  for (let hour = 0; hour < 24; hour++) {
+    for (let minute = 0; minute < 60; minute += 30) {
+      const h = hour % 12 || 12;
+      const ampm = hour < 12 ? "AM" : "PM";
+      const m = minute === 0 ? "00" : minute.toString();
+      times.push({
+        value: `${hour.toString().padStart(2, "0")}:${m}`,
+        label: `${h}:${m} ${ampm}`,
+      });
+    }
+  }
+  return times;
+};
+
+const TIME_OPTIONS = generateTimeOptions();
 
 const VenduDetailsScreen = () => {
   const { user, placeData, loadPlace, loadBannerImage, bannerCacheBuster } =
@@ -62,6 +81,31 @@ const VenduDetailsScreen = () => {
   const [isUploadingGallery, setIsUploadingGallery] = React.useState(false);
   const [isDeleteMode, setIsDeleteMode] = React.useState(false);
   const [selectedImageIds, setSelectedImageIds] = React.useState([]);
+  const [editHours, setEditHours] = React.useState({});
+  const [showTimeModal, setShowTimeModal] = React.useState({
+    day: null,
+    type: null,
+  });
+  const [preferences, setPreferences] = React.useState({
+    allow_overlapping_bookings: false,
+    allow_multiple_hours_booking: false,
+    charge_per_guest: false,
+  });
+  const [savedPreferences, setSavedPreferences] = React.useState({
+    allow_overlapping_bookings: false,
+    allow_multiple_hours_booking: false,
+    charge_per_guest: false,
+  });
+  const [isSavingPreferences, setIsSavingPreferences] = React.useState(false);
+  const [editAmenities, setEditAmenities] = React.useState([]);
+  const [amenityInput, setAmenityInput] = React.useState("");
+
+  const preferencesChanged =
+    preferences.allow_overlapping_bookings !==
+      savedPreferences.allow_overlapping_bookings ||
+    preferences.allow_multiple_hours_booking !==
+      savedPreferences.allow_multiple_hours_booking ||
+    preferences.charge_per_guest !== savedPreferences.charge_per_guest;
 
   // Helper function to format time value (e.g., "09:00" to "9:00 AM")
   const formatTimeValue = (timeValue) => {
@@ -104,35 +148,27 @@ const VenduDetailsScreen = () => {
     }
   }, [placeData?.id, loadGalleryImages]);
 
+  const buildEditHoursFromPlace = (hours) => {
+    const result = {};
+    DAYS_OF_WEEK.forEach((day) => {
+      result[day] = { open: "", close: "" };
+    });
+    if (hours && typeof hours === "object") {
+      Object.keys(hours).forEach((day) => {
+        if (hours[day]) {
+          result[day] = {
+            open: hours[day].open || "",
+            close: hours[day].close || "",
+          };
+        }
+      });
+    }
+    return result;
+  };
+
   // Initialize form data when placeData is available
   React.useEffect(() => {
     if (placeData) {
-      // Format hours for editing (convert JSONB to editable format)
-      let hoursForEdit = "";
-      if (placeData.hours) {
-        if (
-          typeof placeData.hours === "object" &&
-          Object.keys(placeData.hours).length > 0
-        ) {
-          // Convert JSONB object to readable string format
-          const hoursArray = [];
-          Object.keys(placeData.hours).forEach((day) => {
-            const dayHours = placeData.hours[day];
-            if (dayHours.open === "closed" && dayHours.close === "closed") {
-              hoursArray.push(`${day}: Closed`);
-            } else if (dayHours.open && dayHours.close) {
-              // Format time values to readable format
-              const openTime = formatTimeValue(dayHours.open);
-              const closeTime = formatTimeValue(dayHours.close);
-              hoursArray.push(`${day}: ${openTime} - ${closeTime}`);
-            }
-          });
-          hoursForEdit = hoursArray.join("\n");
-        } else if (typeof placeData.hours === "string") {
-          hoursForEdit = placeData.hours;
-        }
-      }
-
       setEditFormData({
         name: placeData.name || "",
         category: placeData.category || "",
@@ -149,9 +185,25 @@ const VenduDetailsScreen = () => {
         rating: placeData.rating?.toString() || "",
         review_count: placeData.review_count?.toString() || "",
         avg_price: placeData.avg_price?.toString() || "",
-        hours: hoursForEdit,
         amenities: normalizeAmenities(placeData.amenities),
       });
+      setEditHours(buildEditHoursFromPlace(placeData.hours));
+      const prefs = {
+        allow_overlapping_bookings: !!placeData.allow_overlapping_bookings,
+        allow_multiple_hours_booking: !!placeData.allow_multiple_hours_booking,
+        charge_per_guest: !!placeData.charge_per_guest,
+      };
+      setPreferences(prefs);
+      setSavedPreferences(prefs);
+      const amenitiesArr = Array.isArray(placeData.amenities)
+        ? placeData.amenities.filter(Boolean)
+        : placeData.amenities && typeof placeData.amenities === "string"
+          ? placeData.amenities
+              .split(",")
+              .map((a) => a.trim())
+              .filter(Boolean)
+          : [];
+      setEditAmenities(amenitiesArr);
       setLoading(false);
     }
   }, [placeData]);
@@ -393,7 +445,8 @@ const VenduDetailsScreen = () => {
                 .map((item) => {
                   const url = item.gallery_image_url;
                   if (!url) return null;
-                  const raw = url.split("places_images/")[1] || url.split("/").pop();
+                  const raw =
+                    url.split("places_images/")[1] || url.split("/").pop();
                   return raw ? raw.split("?")[0] : null;
                 })
                 .filter(Boolean);
@@ -426,32 +479,7 @@ const VenduDetailsScreen = () => {
   };
 
   const handleCancel = () => {
-    // Reset form data to original place data from cache
     if (placeData) {
-      // Format hours for editing (convert JSONB to editable format)
-      let hoursForEdit = "";
-      if (placeData.hours) {
-        if (
-          typeof placeData.hours === "object" &&
-          Object.keys(placeData.hours).length > 0
-        ) {
-          const hoursArray = [];
-          Object.keys(placeData.hours).forEach((day) => {
-            const dayHours = placeData.hours[day];
-            if (dayHours.open === "closed" && dayHours.close === "closed") {
-              hoursArray.push(`${day}: Closed`);
-            } else if (dayHours.open && dayHours.close) {
-              const openTime = formatTimeValue(dayHours.open);
-              const closeTime = formatTimeValue(dayHours.close);
-              hoursArray.push(`${day}: ${openTime} - ${closeTime}`);
-            }
-          });
-          hoursForEdit = hoursArray.join("\n");
-        } else if (typeof placeData.hours === "string") {
-          hoursForEdit = placeData.hours;
-        }
-      }
-
       setEditFormData({
         name: placeData.name || "",
         category: placeData.category || "",
@@ -468,9 +496,19 @@ const VenduDetailsScreen = () => {
         rating: placeData.rating?.toString() || "",
         review_count: placeData.review_count?.toString() || "",
         avg_price: placeData.avg_price?.toString() || "",
-        hours: hoursForEdit,
         amenities: normalizeAmenities(placeData.amenities),
       });
+      setEditHours(buildEditHoursFromPlace(placeData.hours));
+      const amenitiesArr = Array.isArray(placeData.amenities)
+        ? placeData.amenities.filter(Boolean)
+        : placeData.amenities && typeof placeData.amenities === "string"
+          ? placeData.amenities
+              .split(",")
+              .map((a) => a.trim())
+              .filter(Boolean)
+          : [];
+      setEditAmenities(amenitiesArr);
+      setAmenityInput("");
     }
     setIsEditing(false);
   };
@@ -502,8 +540,25 @@ const VenduDetailsScreen = () => {
         avg_price: editFormData.avg_price
           ? parseFloat(editFormData.avg_price)
           : null,
-        hours: parseHoursInput(editFormData.hours),
-        amenities: parseAmenitiesInput(editFormData.amenities),
+        hours: (() => {
+          const hoursJsonb = {};
+          DAYS_OF_WEEK.forEach((day) => {
+            const dh = editHours[day];
+            if (!dh) return;
+            if (dh.open === "closed" && dh.close === "closed") {
+              hoursJsonb[day] = { open: "closed", close: "closed" };
+            } else if (
+              dh.open &&
+              dh.close &&
+              dh.open !== "closed" &&
+              dh.close !== "closed"
+            ) {
+              hoursJsonb[day] = { open: dh.open, close: dh.close };
+            }
+          });
+          return Object.keys(hoursJsonb).length > 0 ? hoursJsonb : null;
+        })(),
+        amenities: editAmenities.length > 0 ? editAmenities : null,
       };
 
       await api.updateVendorPlace(placeId, updateData);
@@ -648,17 +703,61 @@ const VenduDetailsScreen = () => {
     );
   };
 
+  const togglePreference = (key) => {
+    setPreferences((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleSavePreferences = async () => {
+    const placeId = user?.place_id || placeData?.id;
+    if (!placeId || !preferencesChanged) return;
+
+    setIsSavingPreferences(true);
+    try {
+      await api.updateVendorPlace(placeId, {
+        allow_overlapping_bookings: preferences.allow_overlapping_bookings,
+        allow_multiple_hours_booking: preferences.allow_multiple_hours_booking,
+        charge_per_guest: preferences.charge_per_guest,
+      });
+      setSavedPreferences({ ...preferences });
+      Alert.alert("Success", "Preferences updated successfully!");
+      await loadPlace(true);
+    } catch (error) {
+      console.error("Error updating preferences:", error);
+      Alert.alert("Error", "Failed to update preferences. Please try again.");
+    } finally {
+      setIsSavingPreferences(false);
+    }
+  };
+
+  const handleEditHoursChange = (day, type, value) => {
+    setEditHours((prev) => ({
+      ...prev,
+      [day]: { ...prev[day], [type]: value },
+    }));
+  };
+
+  const selectTime = (timeValue) => {
+    if (showTimeModal.day && showTimeModal.type) {
+      if (timeValue === "closed") {
+        setEditHours((prev) => ({
+          ...prev,
+          [showTimeModal.day]: { open: "closed", close: "closed" },
+        }));
+      } else {
+        handleEditHoursChange(showTimeModal.day, showTimeModal.type, timeValue);
+      }
+    }
+    setShowTimeModal({ day: null, type: null });
+  };
+
   const renderHoursField = () => {
     const hours = placeData?.hours;
 
-    // Format hours for display
     const formatHoursForDisplay = () => {
       if (!hours) return null;
-
       if (typeof hours === "object" && Object.keys(hours).length > 0) {
         return hours;
       } else if (typeof hours === "string" && hours.trim()) {
-        // Try to parse string format back to object (for backward compatibility)
         const hoursObj = {};
         const lines = hours.split("\n").filter(Boolean);
         lines.forEach((line) => {
@@ -687,22 +786,91 @@ const VenduDetailsScreen = () => {
 
     const hoursObj = formatHoursForDisplay();
 
+    const renderEditHoursRow = (day) => {
+      const dayHours = editHours[day] || { open: "", close: "" };
+      const isClosed =
+        dayHours.open === "closed" && dayHours.close === "closed";
+
+      const openLabel = isClosed
+        ? "Closed"
+        : dayHours.open
+          ? TIME_OPTIONS.find((t) => t.value === dayHours.open)?.label ||
+            dayHours.open
+          : "Select";
+      const closeLabel = isClosed
+        ? "Closed"
+        : dayHours.close
+          ? TIME_OPTIONS.find((t) => t.value === dayHours.close)?.label ||
+            dayHours.close
+          : "Select";
+
+      return (
+        <View key={day} style={styles.editHoursRow}>
+          <View style={styles.editHoursDayCol}>
+            <Text style={styles.editHoursDayText}>{day.substring(0, 3)}</Text>
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.editHoursTimeCol,
+              isClosed && styles.editHoursTimeColClosed,
+            ]}
+            onPress={() => setShowTimeModal({ day, type: "open" })}
+          >
+            <Text
+              style={[
+                styles.editHoursTimeText,
+                !dayHours.open && styles.editHoursTimePlaceholder,
+                isClosed && styles.editHoursTimeClosedText,
+              ]}
+            >
+              {openLabel}
+            </Text>
+            <Ionicons
+              name="chevron-down"
+              size={16}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.editHoursTimeCol,
+              isClosed && styles.editHoursTimeColClosed,
+            ]}
+            onPress={() => setShowTimeModal({ day, type: "close" })}
+          >
+            <Text
+              style={[
+                styles.editHoursTimeText,
+                !dayHours.close && styles.editHoursTimePlaceholder,
+                isClosed && styles.editHoursTimeClosedText,
+              ]}
+            >
+              {closeLabel}
+            </Text>
+            <Ionicons
+              name="chevron-down"
+              size={16}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+        </View>
+      );
+    };
+
     return (
       <View style={styles.detailRow}>
         <Ionicons name="time-outline" size={20} color={colors.primary} />
         <View style={styles.detailContent}>
           <Text style={styles.detailLabel}>Working Hours</Text>
           {isEditing ? (
-            <TextInput
-              style={[styles.detailInput, styles.detailInputMultiline]}
-              value={editFormData.hours || ""}
-              onChangeText={(value) => handleFieldChange("hours", value)}
-              placeholder="Monday: 9:00 AM - 6:00 PM&#10;Tuesday: Closed"
-              placeholderTextColor={colors.textSecondary}
-              multiline={true}
-              numberOfLines={7}
-              textAlignVertical="top"
-            />
+            <View style={styles.editHoursTable}>
+              <View style={styles.editHoursHeader}>
+                <Text style={styles.editHoursHeaderText}>Day</Text>
+                <Text style={styles.editHoursHeaderText}>Open</Text>
+                <Text style={styles.editHoursHeaderText}>Close</Text>
+              </View>
+              {DAYS_OF_WEEK.map((day) => renderEditHoursRow(day))}
+            </View>
           ) : hoursObj && Object.keys(hoursObj).length > 0 ? (
             <View style={styles.hoursTable}>
               {DAYS_OF_WEEK.map((day) => {
@@ -743,6 +911,18 @@ const VenduDetailsScreen = () => {
     );
   };
 
+  const addAmenity = () => {
+    const trimmed = amenityInput.trim();
+    if (trimmed && !editAmenities.includes(trimmed)) {
+      setEditAmenities((prev) => [...prev, trimmed]);
+      setAmenityInput("");
+    }
+  };
+
+  const removeAmenity = (amenity) => {
+    setEditAmenities((prev) => prev.filter((a) => a !== amenity));
+  };
+
   const renderAmenitiesField = () => {
     const amenities = placeData?.amenities;
     const amenitiesArray = Array.isArray(amenities)
@@ -760,13 +940,53 @@ const VenduDetailsScreen = () => {
         <View style={styles.detailContent}>
           <Text style={styles.detailLabel}>Amenities</Text>
           {isEditing ? (
-            <TextInput
-              style={styles.detailInput}
-              value={editFormData.amenities || ""}
-              onChangeText={(value) => handleFieldChange("amenities", value)}
-              placeholder="WiFi, Parking, Air Conditioning (comma separated)"
-              placeholderTextColor={colors.textSecondary}
-            />
+            <>
+              <View style={styles.editAmenitiesInputRow}>
+                <TextInput
+                  style={styles.editAmenitiesInput}
+                  value={amenityInput}
+                  onChangeText={setAmenityInput}
+                  placeholder="Add an amenity (e.g., WiFi)"
+                  placeholderTextColor={colors.textSecondary}
+                  onSubmitEditing={addAmenity}
+                  returnKeyType="done"
+                />
+                <TouchableOpacity
+                  onPress={addAmenity}
+                  disabled={!amenityInput.trim()}
+                  style={styles.editAmenitiesAddBtn}
+                >
+                  <Ionicons
+                    name="add-circle"
+                    size={26}
+                    color={
+                      amenityInput.trim()
+                        ? colors.primary
+                        : colors.textSecondary
+                    }
+                  />
+                </TouchableOpacity>
+              </View>
+              {editAmenities.length > 0 && (
+                <View style={styles.amenitiesContainer}>
+                  {editAmenities.map((amenity, index) => (
+                    <View key={index} style={styles.amenityBadge}>
+                      <Text style={styles.amenityBadgeText}>{amenity}</Text>
+                      <TouchableOpacity
+                        onPress={() => removeAmenity(amenity)}
+                        style={styles.editAmenityRemoveBtn}
+                      >
+                        <Ionicons
+                          name="close-circle"
+                          size={18}
+                          color={colors.textSecondary}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
           ) : amenitiesArray.length > 0 ? (
             <View style={styles.amenitiesContainer}>
               {amenitiesArray.map((amenity, index) => (
@@ -928,7 +1148,7 @@ const VenduDetailsScreen = () => {
     >
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Venu Details</Text>
+        <Text style={styles.title}>Venue Details</Text>
         <Text style={styles.description}>
           Manage your business information and vendor details
         </Text>
@@ -1020,17 +1240,108 @@ const VenduDetailsScreen = () => {
         </View>
       </Modal>
 
-      {/* Section 2: Place Details */}
+      {/* Section 2: Gallery */}
+      <View style={styles.section}>
+        <View style={styles.galleryHeader}>
+          <Text style={styles.sectionTitle}>Gallery</Text>
+          <View style={styles.galleryHeaderActions}>
+            {galleryImages.length > 0 && (
+              <TouchableOpacity
+                style={[styles.deleteButton, { marginRight: 12 }]}
+                onPress={handleToggleDeleteMode}
+              >
+                <Ionicons
+                  name={isDeleteMode ? "close-circle" : "trash-outline"}
+                  size={22}
+                  color="#FFFFFF"
+                />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={handlePickGalleryImages}
+            >
+              <Ionicons name="add-circle-outline" size={22} color={"#FFFFFF"} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        {isDeleteMode && (
+          <View>
+            {selectedImageIds.length > 0 && (
+              <TouchableOpacity
+                style={styles.deleteBarButton}
+                onPress={handleDeleteSelectedImages}
+              >
+                <Ionicons name="trash" size={18} color="#FFFFFF" />
+                <Text style={styles.deleteBarButtonText}>Delete</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+        <View style={styles.galleryContainer}>
+          {galleryImages.length > 0 ? (
+            <View style={styles.galleryGrid}>
+              {galleryImages.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.galleryItem}
+                  onPress={() =>
+                    isDeleteMode
+                      ? handleToggleImageSelection(item.id)
+                      : undefined
+                  }
+                  activeOpacity={isDeleteMode ? 0.7 : 1}
+                  disabled={!isDeleteMode}
+                >
+                  <Image
+                    source={{ uri: item.gallery_image_url }}
+                    style={styles.galleryImage}
+                    contentFit="cover"
+                    transition={200}
+                  />
+                  {isDeleteMode && (
+                    <View
+                      style={[
+                        styles.galleryCheckbox,
+                        selectedImageIds.includes(item.id) &&
+                          styles.galleryCheckboxSelected,
+                      ]}
+                    >
+                      {selectedImageIds.includes(item.id) && (
+                        <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                      )}
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.galleryEmpty}>
+              <Ionicons
+                name="images-outline"
+                size={64}
+                color={colors.textSecondary}
+              />
+              <Text style={styles.galleryEmptyText}>No gallery images yet</Text>
+              <TouchableOpacity
+                style={styles.addImageButton}
+                onPress={handlePickGalleryImages}
+              >
+                <Ionicons name="add-circle" size={24} color={colors.primary} />
+                <Text style={styles.addImageText}>Add Images to Gallery</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Section 3: Place Details */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Place Details</Text>
           {!isEditing ? (
             <TouchableOpacity onPress={handleEdit} style={styles.editButton}>
-              <Ionicons
-                name="create-outline"
-                size={20}
-                color={colors.primary}
-              />
+              <Ionicons name="create-outline" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           ) : (
             <View style={styles.editActions}>
@@ -1193,105 +1504,134 @@ const VenduDetailsScreen = () => {
         </View>
       </View>
 
-      {/* Section 3: Gallery */}
+      {/* Section 4: Preferences */}
       <View style={styles.section}>
-        <View style={styles.galleryHeader}>
-          <Text style={styles.sectionTitle}>Gallery</Text>
-          <View style={styles.galleryHeaderActions}>
-            {galleryImages.length > 0 && (
-              <TouchableOpacity
-                style={[styles.deleteButton, { marginRight: 12 }]}
-                onPress={handleToggleDeleteMode}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Preferences</Text>
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              styles.saveButton,
+              !preferencesChanged && styles.saveButtonDisabled,
+            ]}
+            onPress={handleSavePreferences}
+            disabled={isSavingPreferences || !preferencesChanged}
+          >
+            {isSavingPreferences ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text
+                style={[
+                  styles.saveButtonText,
+                  !preferencesChanged && styles.saveButtonTextDisabled,
+                ]}
               >
-                <Ionicons
-                  name={isDeleteMode ? "close-circle" : "trash-outline"}
-                  size={22}
-                  color="#FFFFFF"
-                />
-              </TouchableOpacity>
+                Save
+              </Text>
             )}
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={handlePickGalleryImages}
-            >
-              <Ionicons name="add-circle-outline" size={22} color={"#FFFFFF"} />
-            </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         </View>
-        {isDeleteMode && (
-          <View style={styles.deleteBar}>
-            <Text style={styles.deleteBarText}>
-              {selectedImageIds.length > 0
-                ? `${selectedImageIds.length} selected`
-                : "Tap images to select"}
-            </Text>
-            {selectedImageIds.length > 0 && (
-              <TouchableOpacity
-                style={styles.deleteBarButton}
-                onPress={handleDeleteSelectedImages}
-              >
-                <Ionicons name="trash" size={18} color="#FFFFFF" />
-                <Text style={styles.deleteBarButtonText}>Delete</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-        <View style={styles.galleryContainer}>
-          {galleryImages.length > 0 ? (
-            <View style={styles.galleryGrid}>
-              {galleryImages.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.galleryItem}
-                  onPress={() =>
-                    isDeleteMode
-                      ? handleToggleImageSelection(item.id)
-                      : undefined
-                  }
-                  activeOpacity={isDeleteMode ? 0.7 : 1}
-                  disabled={!isDeleteMode}
-                >
-                  <Image
-                    source={{ uri: item.gallery_image_url }}
-                    style={styles.galleryImage}
-                    contentFit="cover"
-                    transition={200}
-                  />
-                  {isDeleteMode && (
-                    <View
-                      style={[
-                        styles.galleryCheckbox,
-                        selectedImageIds.includes(item.id) &&
-                          styles.galleryCheckboxSelected,
-                      ]}
-                    >
-                      {selectedImageIds.includes(item.id) && (
-                        <Ionicons name="checkmark" size={18} color="#FFFFFF" />
-                      )}
-                    </View>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          ) : (
-            <View style={styles.galleryEmpty}>
-              <Ionicons
-                name="images-outline"
-                size={64}
-                color={colors.textSecondary}
+        <View style={styles.detailsCard}>
+          {[
+            {
+              key: "allow_overlapping_bookings",
+              title: "Allow Overlapping Bookings",
+              description: "Multiple guests can book the same time slot.",
+              icon: "layers-outline",
+            },
+            {
+              key: "allow_multiple_hours_booking",
+              title: "Allow Multiple Hours Booking",
+              description:
+                "Guests can book consecutive hours in a single reservation.",
+              icon: "time-outline",
+            },
+            {
+              key: "charge_per_guest",
+              title: "Charge Per Guest",
+              description:
+                "Price is calculated per person rather than a flat rate.",
+              icon: "people-outline",
+            },
+          ].map((pref) => (
+            <View
+              key={pref.key}
+              style={[
+                styles.prefRow,
+                preferences[pref.key] && styles.prefRowActive,
+              ]}
+            >
+              <View style={styles.prefLeft}>
+                <Ionicons name={pref.icon} size={22} color={colors.primary} />
+                <View style={styles.prefTextContainer}>
+                  <Text style={[styles.prefTitle, preferences[pref.key]]}>
+                    {pref.title}
+                  </Text>
+                  <Text style={styles.prefDescription}>{pref.description}</Text>
+                </View>
+              </View>
+              <Switch
+                value={preferences[pref.key]}
+                onValueChange={() => togglePreference(pref.key)}
+                trackColor={{
+                  false: colors.border,
+                  true: colors.primary + "60",
+                }}
+                thumbColor={preferences[pref.key] ? colors.primary : "#f4f3f4"}
+                ios_backgroundColor={colors.border}
               />
-              <Text style={styles.galleryEmptyText}>No gallery images yet</Text>
-              <TouchableOpacity
-                style={styles.addImageButton}
-                onPress={handlePickGalleryImages}
-              >
-                <Ionicons name="add-circle" size={24} color={colors.primary} />
-                <Text style={styles.addImageText}>Add Images to Gallery</Text>
-              </TouchableOpacity>
             </View>
-          )}
+          ))}
         </View>
       </View>
+
+      {/* Time Selection Modal */}
+      <Modal
+        visible={showTimeModal.day !== null}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowTimeModal({ day: null, type: null })}
+      >
+        <View style={styles.timeModalOverlay}>
+          <View style={styles.timeModalContent}>
+            <View style={styles.timeModalHeader}>
+              <Text style={styles.timeModalTitle}>
+                Select {showTimeModal.type === "open" ? "Opening" : "Closing"}{" "}
+                Time
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowTimeModal({ day: null, type: null })}
+                style={styles.timeModalCloseButton}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={TIME_OPTIONS}
+              keyExtractor={(item) => item.value}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.timeModalItem,
+                    item.value === "closed" && styles.timeModalItemClosed,
+                  ]}
+                  onPress={() => selectTime(item.value)}
+                >
+                  <Text
+                    style={[
+                      styles.timeModalItemText,
+                      item.value === "closed" && styles.timeModalItemTextClosed,
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              style={styles.timeModalList}
+            />
+          </View>
+        </View>
+      </Modal>
 
       {/* Gallery Preview Modal */}
       <Modal
@@ -1400,7 +1740,7 @@ const styles = StyleSheet.create({
   editButton: {
     padding: 8,
     borderRadius: 8,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.primary,
   },
   editActions: {
     flexDirection: "row",
@@ -1437,6 +1777,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: fonts.semiBold,
     color: "#FFFFFF",
+  },
+  saveButtonDisabled: {
+    backgroundColor: colors.border,
+  },
+  saveButtonTextDisabled: {
+    color: colors.textSecondary,
   },
   // Banner Image Section
   bannerContainer: {
@@ -1690,6 +2036,160 @@ const styles = StyleSheet.create({
     color: colors.error,
     fontFamily: fonts.semiBold,
   },
+  editHoursTable: {
+    backgroundColor: colors.cardBackground,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+    marginTop: 8,
+  },
+  editHoursHeader: {
+    flexDirection: "row",
+    backgroundColor: colors.primary + "15",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  editHoursHeaderText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: fonts.semiBold,
+    color: colors.primary,
+    textAlign: "center",
+  },
+  editHoursRow: {
+    flexDirection: "row",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border + "50",
+    alignItems: "center",
+  },
+  editHoursDayCol: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  editHoursDayText: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
+    color: colors.text,
+  },
+  editHoursTimeCol: {
+    flex: 1.5,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginHorizontal: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  editHoursTimeColClosed: {
+    backgroundColor: colors.error + "15",
+    borderColor: colors.error + "50",
+  },
+  editHoursTimeText: {
+    fontSize: 13,
+    fontFamily: fonts.regular,
+    color: colors.text,
+  },
+  editHoursTimePlaceholder: {
+    color: colors.textSecondary,
+  },
+  editHoursTimeClosedText: {
+    color: colors.error,
+    fontFamily: fonts.semiBold,
+  },
+  timeModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  timeModalContent: {
+    backgroundColor: colors.cardBackground,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "70%",
+    paddingBottom: 20,
+  },
+  timeModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  timeModalTitle: {
+    fontSize: 18,
+    fontFamily: fonts.bold,
+    color: colors.text,
+  },
+  timeModalCloseButton: {
+    padding: 4,
+  },
+  timeModalList: {
+    maxHeight: 400,
+  },
+  timeModalItem: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border + "30",
+  },
+  timeModalItemText: {
+    fontSize: 16,
+    fontFamily: fonts.regular,
+    color: colors.text,
+  },
+  timeModalItemClosed: {
+    backgroundColor: colors.error + "10",
+    borderBottomColor: colors.error + "30",
+  },
+  timeModalItemTextClosed: {
+    color: colors.error,
+    fontFamily: fonts.semiBold,
+  },
+  prefRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border + "40",
+  },
+  prefRowActive: {
+    borderBottomColor: colors.primary + "20",
+  },
+  prefLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    marginRight: 12,
+  },
+  prefTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  prefTitle: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
+    color: colors.text,
+    marginBottom: 2,
+  },
+  prefDescription: {
+    fontSize: 12,
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
+    lineHeight: 17,
+  },
   amenitiesContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1707,6 +2207,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: fonts.regular,
     color: colors.primary,
+    marginRight: 4,
+  },
+  editAmenitiesInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  editAmenitiesInput: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: fonts.regular,
+    color: colors.text,
+    padding: 4,
+  },
+  editAmenitiesAddBtn: {
+    padding: 4,
+  },
+  editAmenityRemoveBtn: {
+    padding: 2,
   },
   detailDropdownDisabled: {
     opacity: 0.6,
@@ -1823,22 +2347,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FF0000",
     padding: 3,
     borderRadius: 8,
-  },
-  deleteBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    marginHorizontal: 10,
-    marginBottom: 8,
-    backgroundColor: colors.surface,
-    borderRadius: 8,
-  },
-  deleteBarText: {
-    fontSize: 14,
-    fontFamily: fonts.regular,
-    color: colors.textSecondary,
   },
   deleteBarButton: {
     flexDirection: "row",
