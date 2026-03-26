@@ -42,6 +42,11 @@ import {
   isFavoriteInDatabase,
 } from "../utils/favorites";
 import BookingModal from "../components/BookingModal";
+import { getPriceUnitLabel } from "../utils/placePrice";
+import {
+  resolvePlaceHours,
+  formatOpeningHoursValue,
+} from "../utils/placeHours";
 
 const { width, height } = Dimensions.get("window");
 
@@ -378,32 +383,7 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
 
   // Hours renderer (supports object/string/legacy fallback)
   const renderOpeningHours = (place) => {
-    let hours = null;
-
-    if (place.opening_hours_json) {
-      try {
-        hours =
-          typeof place.opening_hours_json === "string"
-            ? JSON.parse(place.opening_hours_json)
-            : place.opening_hours_json;
-      } catch {}
-    } else if (place.opening_hours) {
-      try {
-        hours =
-          typeof place.opening_hours === "string"
-            ? JSON.parse(place.opening_hours)
-            : place.opening_hours;
-      } catch {}
-    } else if (place.hours) {
-      try {
-        hours =
-          typeof place.hours === "string"
-            ? JSON.parse(place.hours)
-            : place.hours;
-      } catch {
-        hours = place.hours;
-      }
-    }
+    let hours = resolvePlaceHours(place);
 
     if (!hours) {
       hours = {
@@ -432,18 +412,7 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
     return days.map((day, index) => {
       let raw = hours[day] || hours[day.toLowerCase()] || hours[index] || null;
 
-      let value = "Closed";
-      if (raw) {
-        if (typeof raw === "string") value = raw;
-        else if (typeof raw === "object") {
-          if (raw.open && raw.close) value = `${raw.open} - ${raw.close}`;
-          else if (raw.close === null || raw.close === false) value = "Closed";
-          else value = "Hours available";
-        } else if (Array.isArray(raw)) {
-          if (raw.length >= 2) value = `${raw[0]} - ${raw[1]}`;
-          else if (raw.length === 1) value = raw[0];
-        }
-      }
+      const value = raw ? formatOpeningHoursValue(raw) : "Closed";
 
       const isToday = today === day;
 
@@ -743,7 +712,7 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
                   {placeDetails.avg_price ||
                     placeDetails.price_per_night ||
                     placeDetails.price}{" "}
-                  {placeDetails.price_unit || "per person"}
+                  {getPriceUnitLabel(placeDetails.charge_per_guest)}
                 </Text>
               </View>
             ) : null}
@@ -1500,9 +1469,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.primary + "14",
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.primary,
   },
   amenityMore: {
     backgroundColor: colors.primary + "14",

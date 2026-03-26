@@ -17,6 +17,7 @@ import PlaceCard from "../components/PlaceCard";
 import SkeletonCard from "../components/SkeletonCard";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
+import { formatListingPrice } from "../utils/placePrice";
 import { getCurrentUser } from "../utils/auth";
 import {
   getCachedFavorites,
@@ -68,7 +69,7 @@ const FavoriteScreen = ({ userCountry, onPlacePress, onBack }) => {
       const formatted = places.map((place) => ({
         id: place.id,
         title: place.title || place.name || place.place_name || "Place",
-        price: `$${place.avg_price || 0} per person`,
+        price: formatListingPrice(place.avg_price, place.charge_per_guest),
         rating: parseFloat(place.rating || place.average_rating || 0) || 0,
         ratingString:
           place.rating?.toString() || place.average_rating?.toString() || "0",

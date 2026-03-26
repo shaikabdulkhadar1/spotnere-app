@@ -14,6 +14,7 @@ import PlaceCard from "../components/PlaceCard";
 import SkeletonCard from "../components/SkeletonCard";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
+import { formatListingPrice } from "../utils/placePrice";
 
 const { width } = Dimensions.get("window");
 
@@ -121,7 +122,7 @@ const HomeScreen = ({
       case "rating":
         return sorted.sort((a, b) => b.rating - a.rating);
       case "price":
-        // Extract numeric price from string like "$50 per person"
+        // Extract numeric price from string like "$50 per hour"
         return sorted.sort((a, b) => {
           const priceA =
             parseFloat(a.price?.replace(/[^0-9.]/g, "") || "0") || 0;
@@ -155,7 +156,7 @@ const HomeScreen = ({
       const placesWithRating = allPlaces.map((place) => ({
         id: place.id,
         title: place.title || place.name || place.place_name || "Place",
-        price: `$${place.avg_price || 0} per person`,
+        price: formatListingPrice(place.avg_price, place.charge_per_guest),
         rating: parseFloat(place.rating || place.average_rating || 0) || 0,
         ratingString:
           place.rating?.toString() || place.average_rating?.toString() || "0",

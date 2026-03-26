@@ -1,6 +1,7 @@
 /**
  * BookingDetailScreen — Shows full booking details
- * Displays place info + all booking data fetched from bookings & places tables
+ * Displays place info + all booking data fetched from bookings & places tables.
+ * Date/time strings are pre-formatted by the backend in the venue's timezone.
  */
 
 import React from "react";
@@ -20,64 +21,6 @@ import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
 
 const { width } = Dimensions.get("window");
-
-const formatBookingDate = (isoStr) => {
-  if (!isoStr) return "—";
-  try {
-    const match = String(isoStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (!match) return isoStr;
-    const [, year, month, day] = match;
-    const d = new Date(
-      parseInt(year, 10),
-      parseInt(month, 10) - 1,
-      parseInt(day, 10),
-    );
-    return d.toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
-  } catch {
-    return isoStr;
-  }
-};
-
-const formatBookingTime = (isoStr) => {
-  if (!isoStr) return "—";
-  try {
-    const match = String(isoStr).match(/T(\d{2}):(\d{2})/);
-    if (!match) return "—";
-    const hour = parseInt(match[1], 10);
-    const minute = parseInt(match[2], 10);
-    const ampm = hour >= 12 ? "PM" : "AM";
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${minute.toString().padStart(2, "0")} ${ampm}`;
-  } catch {
-    return "—";
-  }
-};
-
-const formatPaidAt = (isoStr) => {
-  if (!isoStr) return "—";
-  try {
-    const d = new Date(isoStr);
-    const dateStr = d.toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-    const timeStr = d.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-    return `${dateStr} at ${timeStr}`;
-  } catch {
-    return "—";
-  }
-};
 
 const DetailRow = ({ icon, label, value }) => (
   <View style={styles.detailRow}>
@@ -103,9 +46,9 @@ const BookingDetailScreen = ({ booking, onClose, onViewPlace }) => {
     );
   }
 
-  const dateStr = formatBookingDate(booking.bookingDateTime);
-  const timeStr = formatBookingTime(booking.bookingDateTime);
-  const paidAtStr = formatPaidAt(booking.paidAt);
+  const dateStr = booking.bookingDateFormatted || "—";
+  const timeStr = booking.bookingTimeFormatted || "—";
+  const paidAtStr = booking.paidAtFormatted || "—";
 
   return (
     <View style={styles.container}>

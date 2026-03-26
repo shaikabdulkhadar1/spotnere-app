@@ -56,13 +56,12 @@ export const BookingsProvider = ({ children }) => {
         return;
       }
 
-      // Try cache first
+      // Show cached data immediately, then refresh from API
       const cached = await getCachedBookings(user.id);
       if (cached) {
         setBookings(cached);
         setLastFetchedUserId(user.id);
         setLoading(false);
-        return;
       }
 
       const fetched = await fetchBookingsFromApi(user.id);

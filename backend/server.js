@@ -23,6 +23,7 @@ import cors from "cors";
 import crypto from "node:crypto";
 import Razorpay from "razorpay";
 import { createClient } from "@supabase/supabase-js";
+import { DateTime } from "luxon";
 
 const app = express();
 
@@ -294,29 +295,210 @@ async function insertVendorNotificationForBooking(booking) {
   }
 }
 
+// ---------- Helpers ----------
+
+const IANA_TO_ABBR = {
+  "Asia/Kolkata": "IST",
+  "Asia/Calcutta": "IST",
+  "Asia/Colombo": "IST",
+  "America/New_York": { std: "EST", dst: "EDT" },
+  "America/Chicago": { std: "CST", dst: "CDT" },
+  "America/Denver": { std: "MST", dst: "MDT" },
+  "America/Los_Angeles": { std: "PST", dst: "PDT" },
+  "America/Anchorage": { std: "AKST", dst: "AKDT" },
+  "Pacific/Honolulu": "HST",
+  "Europe/London": { std: "GMT", dst: "BST" },
+  "Europe/Paris": { std: "CET", dst: "CEST" },
+  "Europe/Berlin": { std: "CET", dst: "CEST" },
+  "Europe/Moscow": "MSK",
+  "Asia/Dubai": "GST",
+  "Asia/Shanghai": "CST",
+  "Asia/Tokyo": "JST",
+  "Asia/Singapore": "SGT",
+  "Asia/Hong_Kong": "HKT",
+  "Australia/Sydney": { std: "AEST", dst: "AEDT" },
+  "Australia/Perth": "AWST",
+  "Pacific/Auckland": { std: "NZST", dst: "NZDT" },
+  UTC: "UTC",
+};
+
+function getTzAbbr(date, tz) {
+  const entry = IANA_TO_ABBR[tz];
+  if (typeof entry === "string") return entry;
+  if (entry && typeof entry === "object") {
+    const jan = new Date(date.getFullYear(), 0, 1);
+    const jul = new Date(date.getFullYear(), 6, 1);
+    const janOff = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" })
+      .formatToParts(jan).find((p) => p.type === "timeZoneName")?.value || "";
+    const julOff = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" })
+      .formatToParts(jul).find((p) => p.type === "timeZoneName")?.value || "";
+    const curOff = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" })
+      .formatToParts(date).find((p) => p.type === "timeZoneName")?.value || "";
+    return curOff !== janOff && curOff === julOff ? entry.dst : entry.std;
+  }
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      timeZoneName: "short",
+    }).formatToParts(date);
+    const tzPart = parts.find((p) => p.type === "timeZoneName");
+    if (tzPart && !tzPart.value.startsWith("GMT")) return tzPart.value;
+  } catch (_) {}
+  return tz;
+}
+
+/**
+ * Venue-local datetime string → UTC ISO (stored in DB).
+ * localIso: "2025-01-27T10:00:00" interpreted in `timezone` (e.g. Asia/Kolkata = IST).
+ */
+function localToUtc(localIso, timezone) {
+  const tz = timezone || "UTC";
+  const dt = DateTime.fromISO(localIso, { zone: tz });
+  if (!dt.isValid) return null;
+  return dt.toUTC().toISO();
+}
+
+/**
+ * UTC ISO → venue-local slot labels matching the user app grid ("6:00 AM", "10:30 PM").
+ */
+function utcToVenueSlotStrings(utcIso, timezone, durationHours) {
+  const tz = timezone || "UTC";
+  const dt = DateTime.fromISO(utcIso).setZone(tz);
+  if (!dt.isValid) return [];
+  const startMins = dt.hour * 60 + dt.minute;
+  const n = Math.max(1, Number(durationHours) || 1);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const slotMins = startMins + i * 60;
+    const h24 = Math.floor(slotMins / 60) % 24;
+    const m = slotMins % 60;
+    const period = h24 >= 12 ? "PM" : "AM";
+    const hour12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
+    out.push(`${hour12}:${String(m).padStart(2, "0")} ${period}`);
+  }
+  return out;
+}
+
+/**
+ * Format a UTC ISO date-time for display in the venue timezone (e.g. IST).
+ * Returns { dateFormatted, timeFormatted, tzAbbr }.
+ */
+function formatInVenueTimezone(isoStr, timezone) {
+  if (!isoStr) return { dateFormatted: null, timeFormatted: null, tzAbbr: null };
+  const tz = timezone || "UTC";
+  const dt = DateTime.fromISO(isoStr).setZone(tz);
+  if (!dt.isValid) return { dateFormatted: null, timeFormatted: null, tzAbbr: null };
+  const dateFormatted = dt.toFormat("cccc, LLLL d, yyyy");
+  const timeFormatted = dt.toFormat("h:mm a");
+  const tzAbbr = getTzAbbr(dt.toJSDate(), tz);
+  return { dateFormatted, timeFormatted, tzAbbr };
+}
+
 // ---------- Routes ----------
 app.get("/health", (_, res) => res.json({ ok: true }));
 
 /**
+ * GET /api/bookings/booked-slots?placeId=...&date=YYYY-MM-DD
+ * Calendar day is interpreted in the place's timezone. Loads booking_date_time (UTC) from DB,
+ * converts each row to venue-local 1-hour slot labels (same strings as the booking modal grid).
+ * date: YYYY-MM-DD = local calendar date at the venue (not UTC date).
+ */
+app.get("/api/bookings/booked-slots", async (req, res) => {
+  try {
+    const { placeId, date } = req.query;
+    if (!placeId || !date) {
+      return res.status(400).json({ error: "placeId and date (YYYY-MM-DD) are required" });
+    }
+
+    // Look up the venue timezone so we can convert the local date to UTC range
+    const { data: placeRow } = await supabaseAdmin
+      .from("places")
+      .select("timezone")
+      .eq("id", placeId)
+      .single();
+    const tz = placeRow?.timezone || "UTC";
+
+    const dayStartUtc = localToUtc(`${date}T00:00:00`, tz);
+    const dayEndUtc = localToUtc(`${date}T23:59:59`, tz);
+
+    const { data: bookings, error } = await supabaseAdmin
+      .from("bookings")
+      .select("booking_date_time, duration_hours")
+      .eq("place_id", placeId)
+      .gte("booking_date_time", dayStartUtc)
+      .lte("booking_date_time", dayEndUtc)
+      .in("payment_status", [
+        "PAID",
+        "CONFIRMED",
+        "SUCCESS",
+        "PENDING",
+      ]);
+
+    if (error) {
+      console.error("booked-slots error:", error);
+      return res.status(500).json({ error: "Failed to fetch booked slots" });
+    }
+
+    // UTC from DB → venue timezone (e.g. IST) → same slot strings as the booking modal grid
+    const bookedSlots = new Set();
+    for (const b of bookings || []) {
+      for (const slot of utcToVenueSlotStrings(
+        b.booking_date_time,
+        tz,
+        b.duration_hours,
+      )) {
+        bookedSlots.add(slot);
+      }
+    }
+
+    return res.json({ bookedSlots: [...bookedSlots] });
+  } catch (err) {
+    console.error("booked-slots error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
  * POST /bookings/create-and-order
  * Creates booking row (PENDING) + Razorpay order. Returns order details for checkout.
- * body: { userId, placeId, bookingDateTime, amountInr, currency? }
- * bookingDateTime: ISO string (e.g. "2025-01-27T10:00:00.000Z")
+ * body: { userId, placeId, bookingDateTimeLocal, timezone, amountInr, currency?, number_of_guests?, duration_hours? }
+ *        OR legacy: { ..., bookingDateTime (UTC ISO string) }
+ * bookingDateTimeLocal: "2025-01-27T10:00:00" (venue local, no Z)
+ * timezone: IANA string e.g. "Asia/Kolkata"
  */
 app.post("/bookings/create-and-order", async (req, res) => {
   try {
     const {
       userId,
       placeId,
-      bookingDateTime,
+      bookingDateTimeLocal,
+      timezone,
+      bookingDateTime: legacyBookingDateTime,
       amountInr,
       currency,
       number_of_guests,
+      duration_hours,
     } = req.body;
+
+    let bookingDateTime = legacyBookingDateTime;
+    if (bookingDateTimeLocal) {
+      const { data: placeForTz } = await supabaseAdmin
+        .from("places")
+        .select("timezone")
+        .eq("id", placeId)
+        .maybeSingle();
+      const venueTz = placeForTz?.timezone || timezone || "UTC";
+      bookingDateTime = localToUtc(bookingDateTimeLocal, venueTz);
+      if (!bookingDateTime) {
+        return res.status(400).json({
+          error: "Invalid bookingDateTimeLocal or venue timezone",
+        });
+      }
+    }
 
     if (!userId || !placeId || !bookingDateTime) {
       return res.status(400).json({
-        error: "userId, placeId, and bookingDateTime are required",
+        error: "userId, placeId, and bookingDateTimeLocal+timezone (or bookingDateTime) are required",
       });
     }
     if (!amountInr || Number(amountInr) <= 0) {
@@ -342,6 +524,9 @@ app.post("/bookings/create-and-order", async (req, res) => {
     if (number_of_guests != null && !isNaN(Number(number_of_guests))) {
       insertPayload.number_of_guests = Number(number_of_guests);
     }
+    // Number of 1-hour slots selected (client sends selectedTimeSlots.length); default 1
+    const slotCount = Math.max(1, Math.floor(Number(duration_hours)) || 1);
+    insertPayload.duration_hours = slotCount;
     const { data: booking, error: insertError } = await supabaseAdmin
       .from("bookings")
       .insert(insertPayload)
@@ -484,7 +669,11 @@ app.post("/payments/razorpay/create-order", async (req, res) => {
  */
 app.post("/payments/razorpay/verify", async (req, res) => {
   const log = (msg, data) =>
-    console.log("[verify]", msg, data !== undefined ? JSON.stringify(data) : "");
+    console.log(
+      "[verify]",
+      msg,
+      data !== undefined ? JSON.stringify(data) : "",
+    );
 
   try {
     const {
@@ -611,7 +800,9 @@ app.post("/payments/razorpay/verify", async (req, res) => {
       try {
         await insertVendorNotificationForBooking(booking);
       } catch (notifErr) {
-        log("vendor notification failed (non-fatal)", { err: notifErr?.message });
+        log("vendor notification failed (non-fatal)", {
+          err: notifErr?.message,
+        });
       }
     }
 
@@ -663,9 +854,14 @@ app.get("/payments/razorpay/status", async (req, res) => {
 
 // ---------- API Routes (moved from userapp) ----------
 
+/** Columns on `places` for booking/pricing rules (use in partial selects; full reads use select("*")). */
+const PLACE_BOOKING_PREF_COLUMNS =
+  "charge_per_guest, allow_multiple_hours_booking, allow_overlapping_bookings";
+
 /**
  * GET /api/places?country=...
  * Fetch places filtered by country.
+ * Rows include `charge_per_guest`, `allow_multiple_hours_booking`, `allow_overlapping_bookings` among all place columns.
  */
 app.get("/api/places", async (req, res) => {
   try {
@@ -687,6 +883,7 @@ app.get("/api/places", async (req, res) => {
  * POST /api/places/by-ids
  * body: { placeIds: string[], country?: string }
  * Fetch places by IDs.
+ * Rows include booking preference columns on `places`.
  */
 app.post("/api/places/by-ids", async (req, res) => {
   try {
@@ -709,7 +906,7 @@ app.post("/api/places/by-ids", async (req, res) => {
 
 /**
  * GET /api/places/:placeId
- * Fetch single place.
+ * Fetch single place (all columns, including booking preference flags).
  */
 app.get("/api/places/:placeId", async (req, res) => {
   try {
@@ -866,7 +1063,7 @@ app.post("/api/places/:placeId/reviews", async (req, res) => {
 
 /**
  * GET /api/favorites?userId=...
- * Fetch favorite place IDs and places.
+ * Fetch favorite place IDs and places (full place rows include booking preference columns).
  */
 app.get("/api/favorites", async (req, res) => {
   try {
@@ -995,7 +1192,11 @@ app.get("/api/bookings", async (req, res) => {
           rating,
           country,
           city,
-          address
+          address,
+          timezone,
+          charge_per_guest,
+          allow_multiple_hours_booking,
+          allow_overlapping_bookings
         )
       `,
       )
@@ -1004,22 +1205,39 @@ app.get("/api/bookings", async (req, res) => {
     if (!joinError && bookingsWithPlaces && bookingsWithPlaces.length > 0) {
       const formatted = bookingsWithPlaces.map((b) => {
         const place = b.places || b.place || {};
+        const tz = place.timezone || null;
+        const priceUnit =
+          place.charge_per_guest === true ? "per person" : "per hour";
+        const booking = formatInVenueTimezone(b.booking_date_time, tz);
+        const paidAtFmt = formatInVenueTimezone(b.paid_at, tz);
         return {
           id: b.id,
           placeId: b.place_id || place.id,
           title: place.name || "Place",
-          price: `$${place.avg_price || 0} per person`,
+          price: `$${place.avg_price || 0} ${priceUnit}`,
           imageUri: place.banner_image_link,
           isSmall: false,
           country: place.country,
+          timezone: tz,
+          charge_per_guest: place.charge_per_guest ?? null,
+          allow_multiple_hours_booking:
+            place.allow_multiple_hours_booking ?? null,
+          allow_overlapping_bookings: place.allow_overlapping_bookings ?? null,
           bookingRefNumber: b.booking_ref_number,
           bookingDateTime: b.booking_date_time,
+          bookingDateFormatted: booking.dateFormatted,
+          bookingTimeFormatted: booking.timeFormatted
+            ? `${booking.timeFormatted} ${booking.tzAbbr || ""}`.trim()
+            : null,
           amountPaid: b.amount_paid,
           currencyPaid: b.currency_paid,
           paymentStatus: b.payment_status,
           numberOfGuests: b.number_of_guests,
           paymentMethod: b.payment_method,
           paidAt: b.paid_at,
+          paidAtFormatted: paidAtFmt.dateFormatted && paidAtFmt.timeFormatted
+            ? `${paidAtFmt.dateFormatted} at ${paidAtFmt.timeFormatted} ${paidAtFmt.tzAbbr || ""}`.trim()
+            : null,
           transactionId: b.transaction_id,
         };
       });
@@ -1040,7 +1258,7 @@ app.get("/api/bookings", async (req, res) => {
     const { data: places } = await supabaseAdmin
       .from("places")
       .select(
-        "id, name, banner_image_link, avg_price, rating, country, city, address",
+        `id, name, banner_image_link, avg_price, rating, country, city, address, timezone, ${PLACE_BOOKING_PREF_COLUMNS}`,
       )
       .in("id", placeIds);
     const placesMap = (places || []).reduce((acc, p) => {
@@ -1049,22 +1267,39 @@ app.get("/api/bookings", async (req, res) => {
     }, {});
     const formatted = bookings.map((b) => {
       const place = placesMap[String(b.place_id)] || {};
+      const tz = place.timezone || null;
+      const priceUnit =
+        place.charge_per_guest === true ? "per person" : "per hour";
+      const bkFmt = formatInVenueTimezone(b.booking_date_time, tz);
+      const paidAtFmt = formatInVenueTimezone(b.paid_at, tz);
       return {
         id: b.id,
         placeId: b.place_id,
         title: place.name || "Place",
-        price: `$${place.avg_price || 0} per person`,
+        price: `$${place.avg_price || 0} ${priceUnit}`,
         imageUri: place.banner_image_link,
         isSmall: false,
         country: place.country,
+        timezone: tz,
+        charge_per_guest: place.charge_per_guest ?? null,
+        allow_multiple_hours_booking:
+          place.allow_multiple_hours_booking ?? null,
+        allow_overlapping_bookings: place.allow_overlapping_bookings ?? null,
         bookingRefNumber: b.booking_ref_number,
         bookingDateTime: b.booking_date_time,
+        bookingDateFormatted: bkFmt.dateFormatted,
+        bookingTimeFormatted: bkFmt.timeFormatted
+          ? `${bkFmt.timeFormatted} ${bkFmt.tzAbbr || ""}`.trim()
+          : null,
         amountPaid: b.amount_paid,
         currencyPaid: b.currency_paid,
         paymentStatus: b.payment_status,
         numberOfGuests: b.number_of_guests,
         paymentMethod: b.payment_method,
         paidAt: b.paid_at,
+        paidAtFormatted: paidAtFmt.dateFormatted && paidAtFmt.timeFormatted
+          ? `${paidAtFmt.dateFormatted} at ${paidAtFmt.timeFormatted} ${paidAtFmt.tzAbbr || ""}`.trim()
+          : null,
         transactionId: b.transaction_id,
       };
     });
@@ -1490,7 +1725,10 @@ app.post("/api/vendor/auth/login", async (req, res) => {
 app.post("/api/admin/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body || {};
-    console.log("[Admin] Login attempt for:", email ? `${email.slice(0, 3)}***` : "(no email)");
+    console.log(
+      "[Admin] Login attempt for:",
+      email ? `${email.slice(0, 3)}***` : "(no email)",
+    );
     if (!email || !password) {
       console.warn("[Admin] Login failed: missing email or password");
       return res.status(400).json({ error: "email and password required" });
@@ -1501,7 +1739,9 @@ app.post("/api/admin/auth/login", async (req, res) => {
     });
     if (error) {
       console.warn("[Admin] Login failed:", error.message);
-      return res.status(401).json({ error: error.message || "Invalid email or password" });
+      return res
+        .status(401)
+        .json({ error: error.message || "Invalid email or password" });
     }
     const user = data?.user;
     if (!user) {
@@ -1530,18 +1770,36 @@ app.get("/api/admin/dashboard/stats", async (req, res) => {
   try {
     const [vendorsRes, placesRes, bookingsRes, revenueRes, reviewsRes] =
       await Promise.all([
-        supabaseAdmin.from("vendors").select("*", { count: "exact", head: true }),
-        supabaseAdmin.from("places").select("*", { count: "exact", head: true }),
-        supabaseAdmin.from("bookings").select("*", { count: "exact", head: true }),
+        supabaseAdmin
+          .from("vendors")
+          .select("*", { count: "exact", head: true }),
+        supabaseAdmin
+          .from("places")
+          .select("*", { count: "exact", head: true }),
+        supabaseAdmin
+          .from("bookings")
+          .select("*", { count: "exact", head: true }),
         supabaseAdmin
           .from("bookings")
           .select("amount_paid")
-          .in("payment_status", ["PAID", "paid", "COMPLETED", "completed", "SUCCESS", "success"]),
-        supabaseAdmin.from("reviews").select("*", { count: "exact", head: true }),
+          .in("payment_status", [
+            "PAID",
+            "paid",
+            "COMPLETED",
+            "completed",
+            "SUCCESS",
+            "success",
+          ]),
+        supabaseAdmin
+          .from("reviews")
+          .select("*", { count: "exact", head: true }),
       ]);
 
     const totalRevenue =
-      (revenueRes.data || []).reduce((sum, b) => sum + Number(b.amount_paid || 0), 0) || 0;
+      (revenueRes.data || []).reduce(
+        (sum, b) => sum + Number(b.amount_paid || 0),
+        0,
+      ) || 0;
 
     return res.json({
       vendorsCount: vendorsRes.count ?? 0,
@@ -1573,7 +1831,14 @@ app.get("/api/admin/dashboard/sales", async (req, res) => {
     const { data: bookings, error } = await supabaseAdmin
       .from("bookings")
       .select("amount_paid, paid_at, booking_date_time")
-      .in("payment_status", ["PAID", "paid", "COMPLETED", "completed", "SUCCESS", "success"])
+      .in("payment_status", [
+        "PAID",
+        "paid",
+        "COMPLETED",
+        "completed",
+        "SUCCESS",
+        "success",
+      ])
       .not("amount_paid", "is", null);
 
     if (error) throw error;
@@ -1581,7 +1846,8 @@ app.get("/api/admin/dashboard/sales", async (req, res) => {
     const byKey = {};
     const now = new Date();
     const fmt = (d) => {
-      if (period === "monthly") return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (period === "monthly")
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       if (period === "weekly") {
         const weekStart = new Date(d);
         weekStart.setDate(d.getDate() - d.getDay());
@@ -1590,9 +1856,11 @@ app.get("/api/admin/dashboard/sales", async (req, res) => {
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     };
     const labelFmt = (d) => {
-      if (period === "monthly") return `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]} ${d.getMonth() === 0 ? d.getFullYear() : ""}`.trim();
-      if (period === "weekly") return `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]} ${d.getDate()}`;
-      return `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]} ${d.getDate()}`;
+      if (period === "monthly")
+        return `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()]} ${d.getMonth() === 0 ? d.getFullYear() : ""}`.trim();
+      if (period === "weekly")
+        return `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()]} ${d.getDate()}`;
+      return `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()]} ${d.getDate()}`;
     };
 
     for (let i = 0; i <= daysBack; i++) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -21,6 +21,7 @@ import { getCurrentUser } from "../utils/auth";
 import { useBookings } from "../context/BookingsContext";
 import { NativeModules } from "react-native";
 import RazorpayCheckout from "react-native-razorpay";
+import { resolvePlaceHours } from "../utils/placeHours";
 
 const { width, height } = Dimensions.get("window");
 
@@ -36,7 +37,8 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
   const { refreshBookings } = useBookings();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState(null);
+  /** Display strings from timeSlots, e.g. "6:00 AM". Multiple = multi-hour booking when allowed. */
+  const [selectedTimeSlots, setSelectedTimeSlots] = useState([]);
   const [guests, setGuests] = useState("");
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -45,19 +47,28 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
   const [showPaymentFailed, setShowPaymentFailed] = useState(false);
   const [paymentFailedMessage, setPaymentFailedMessage] = useState("");
   const [showPaymentCancelled, setShowPaymentCancelled] = useState(false);
+  const [bookedSlots, setBookedSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
 
   useEffect(() => {
     if (!visible) {
       setShowPaymentSuccess(false);
       setShowPaymentFailed(false);
       setShowPaymentCancelled(false);
+      setSelectedDate(null);
+      setSelectedTimeSlots([]);
+      setGuests("");
+      setShowBreakdown(false);
+      setBookedSlots([]);
     }
   }, [visible]);
 
-  // Parse time string (e.g. "9:00 AM", "10:30 PM", "09:00", "21:00") to minutes since midnight
+  // Parse time string (e.g. "9:00 AM", "10:30 PM", "09:00", "21:00", "06:00:00") to minutes since midnight
   const parseTimeToMinutes = (str) => {
     if (!str || typeof str !== "string") return 0;
-    const s = str.trim().toUpperCase();
+    let s = str.trim().toUpperCase();
+    // Strip optional seconds/millis so "06:00:00" parses (vendor / DB formats)
+    s = s.replace(/^(\d{1,2}:\d{2}):\d{2}(?:\.\d+)?(?=\s|$|[AP]M)/i, "$1");
     const match = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/);
     if (!match) return 0;
     let h = parseInt(match[1], 10);
@@ -80,42 +91,20 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
     return `${hour}:${String(m).padStart(2, "0")} ${period}`;
   };
 
+  /** Match API slot strings to grid labels by minutes (avoids formatting mismatches). */
+  const bookedSlotMinutesSet = useMemo(
+    () => new Set((bookedSlots || []).map((s) => parseTimeToMinutes(s))),
+    [bookedSlots],
+  );
+
+  const isSlotBooked = (timeSlot) =>
+    bookedSlotMinutesSet.has(parseTimeToMinutes(timeSlot));
+
   // Parse opening hours and return set of closed day indices (0=Sun, 1=Mon, ..., 6=Sat)
   const getClosedDayIndices = () => {
     const closed = new Set();
-    const dayNameToIndex = {
-      Sunday: 0,
-      Monday: 1,
-      Tuesday: 2,
-      Wednesday: 3,
-      Thursday: 4,
-      Friday: 5,
-      Saturday: 6,
-    };
-    let hours = null;
     const place = placeDetails || {};
-    if (place.opening_hours_json) {
-      try {
-        hours =
-          typeof place.opening_hours_json === "string"
-            ? JSON.parse(place.opening_hours_json)
-            : place.opening_hours_json;
-      } catch {}
-    } else if (place.opening_hours) {
-      try {
-        hours =
-          typeof place.opening_hours === "string"
-            ? JSON.parse(place.opening_hours)
-            : place.opening_hours;
-      } catch {}
-    } else if (place.hours) {
-      try {
-        hours =
-          typeof place.hours === "string" ? JSON.parse(place.hours) : place.hours;
-      } catch {
-        hours = place.hours;
-      }
-    }
+    const hours = resolvePlaceHours(place);
     if (!hours || typeof hours !== "object") return closed;
     const dayNames = [
       "Sunday",
@@ -128,10 +117,7 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
     ];
     for (let i = 0; i < dayNames.length; i++) {
       const dayName = dayNames[i];
-      const raw =
-        hours[dayName] ||
-        hours[dayName.toLowerCase()] ||
-        hours[i];
+      const raw = hours[dayName] || hours[dayName.toLowerCase()] || hours[i];
       let isClosed = !raw;
       if (raw) {
         if (typeof raw === "string") {
@@ -158,30 +144,8 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
 
   // Get open/close times for a day index (0=Sun, 1=Mon, ...). Returns { openMins, closeMins } or null if closed.
   const getHoursForDay = (dayIndex) => {
-    let hours = null;
     const place = placeDetails || {};
-    if (place.opening_hours_json) {
-      try {
-        hours =
-          typeof place.opening_hours_json === "string"
-            ? JSON.parse(place.opening_hours_json)
-            : place.opening_hours_json;
-      } catch {}
-    } else if (place.opening_hours) {
-      try {
-        hours =
-          typeof place.opening_hours === "string"
-            ? JSON.parse(place.opening_hours)
-            : place.opening_hours;
-      } catch {}
-    } else if (place.hours) {
-      try {
-        hours =
-          typeof place.hours === "string" ? JSON.parse(place.hours) : place.hours;
-      } catch {
-        hours = place.hours;
-      }
-    }
+    const hours = resolvePlaceHours(place);
     if (!hours || typeof hours !== "object") return null;
     const dayNames = [
       "Sunday",
@@ -210,10 +174,15 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
       const openVal = raw.open;
       const closeVal = raw.close;
       if (
-        !openVal ||
-        !closeVal ||
-        String(openVal).toLowerCase() === "closed" ||
-        String(closeVal).toLowerCase() === "closed"
+        String(openVal || "").toLowerCase() === "closed" ||
+        String(closeVal || "").toLowerCase() === "closed"
+      )
+        return null;
+      if (
+        openVal == null ||
+        closeVal == null ||
+        openVal === "" ||
+        closeVal === ""
       )
         return null;
       openStr = String(openVal);
@@ -229,8 +198,8 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
     return { openMins, closeMins };
   };
 
-  // Generate 30-min slots between open and close for the selected date
-  const SLOT_INTERVAL = 30;
+  // Generate 1-hour slots from opening through closing (last slot starts strictly before close time)
+  const SLOT_INTERVAL_MINUTES = 60;
   const DEFAULT_OPEN = 9 * 60; // 9:00 AM
   const DEFAULT_CLOSE = 22 * 60; // 10:00 PM
   const getTimeSlotsForSelectedDate = () => {
@@ -243,13 +212,93 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
       range = { openMins: DEFAULT_OPEN, closeMins: DEFAULT_CLOSE };
     }
     const slots = [];
-    for (let m = range.openMins; m < range.closeMins; m += SLOT_INTERVAL) {
+    for (
+      let m = range.openMins;
+      m < range.closeMins;
+      m += SLOT_INTERVAL_MINUTES
+    ) {
       slots.push(minutesToTimeStr(m));
     }
     return slots;
   };
 
   const timeSlots = getTimeSlotsForSelectedDate();
+
+  const allowMultipleHours =
+    placeDetails?.allow_multiple_hours_booking === true;
+
+  const chargePerGuest = placeDetails?.charge_per_guest === true;
+
+  const allowOverlapping =
+    placeDetails?.allow_overlapping_bookings === true;
+
+  /** Guests affect price only when charge_per_guest; otherwise field is read-only / grayed. */
+  const guestsFieldDisabled =
+    !selectedDate || selectedTimeSlots.length === 0 || !chargePerGuest;
+
+  /**
+   * Load booked 1-hour slots for this place + calendar day.
+   * Backend reads bookings (UTC), converts to place timezone, returns labels matching the grid.
+   * When allow_overlapping_bookings is false, those slots are disabled / grayed out.
+   */
+  useEffect(() => {
+    if (!visible) {
+      setBookedSlots([]);
+      return;
+    }
+    if (!selectedDate || allowOverlapping) {
+      setBookedSlots([]);
+      return;
+    }
+    const placeId = placeDetails?.id || placeDetails?.place_id;
+    if (!placeId) return;
+
+    const y = selectedDate.getFullYear();
+    const mo = String(selectedDate.getMonth() + 1).padStart(2, "0");
+    const dy = String(selectedDate.getDate()).padStart(2, "0");
+    const dateStr = `${y}-${mo}-${dy}`;
+
+    let cancelled = false;
+    setLoadingSlots(true);
+
+    fetch(
+      `${API_BASE}/api/bookings/booked-slots?placeId=${encodeURIComponent(placeId)}&date=${encodeURIComponent(dateStr)}`,
+      { headers: { "ngrok-skip-browser-warning": "true" } },
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) setBookedSlots(data.bookedSlots || []);
+      })
+      .catch((err) => {
+        console.warn("Failed to fetch booked slots:", err);
+        if (!cancelled) setBookedSlots([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSlots(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, selectedDate, allowOverlapping, placeDetails]);
+
+  const sortSlotsByTime = (slots) =>
+    [...slots].sort((a, b) => parseTimeToMinutes(a) - parseTimeToMinutes(b));
+
+  /** Slots are 1 hour apart; selected block must be consecutive with no gaps. */
+  const areHourSlotsConsecutive = (slots) => {
+    if (slots.length <= 1) return true;
+    const sorted = sortSlotsByTime(slots);
+    for (let i = 1; i < sorted.length; i++) {
+      if (
+        parseTimeToMinutes(sorted[i]) - parseTimeToMinutes(sorted[i - 1]) !==
+        SLOT_INTERVAL_MINUTES
+      ) {
+        return false;
+      }
+    }
+    return true;
+  };
 
   const getDaysInMonth = (date) => {
     const year = date.getFullYear();
@@ -294,13 +343,23 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
   const handleDatePress = (date) => {
     if (!date || isPastDate(date) || isDateClosed(date)) return;
     setSelectedDate(date);
-    setSelectedTimeSlot(null); // Reset time slot when date changes
-    setGuests(""); // Reset guests when date changes
+    setSelectedTimeSlots([]);
+    setGuests("");
   };
 
   const handleTimeSlotPress = (timeSlot) => {
-    if (!selectedDate) return; // Don't allow selection if no date is selected
-    setSelectedTimeSlot(timeSlot);
+    if (!selectedDate) return;
+    if (!allowOverlapping && isSlotBooked(timeSlot)) return;
+    if (!allowMultipleHours) {
+      setSelectedTimeSlots([timeSlot]);
+      return;
+    }
+    setSelectedTimeSlots((prev) => {
+      if (prev.includes(timeSlot)) {
+        return prev.filter((t) => t !== timeSlot);
+      }
+      return [...prev, timeSlot];
+    });
   };
 
   const navigateMonth = (direction) => {
@@ -314,26 +373,32 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
   };
 
   const calculateTotal = () => {
-    if (!placeDetails || !selectedDate || !selectedTimeSlot || !guests) {
-      return { subtotal: 0, serviceFee: 0, total: 0 };
+    const hourCount = selectedTimeSlots.length;
+    if (
+      !placeDetails ||
+      !selectedDate ||
+      hourCount === 0 ||
+      (chargePerGuest && !guests)
+    ) {
+      return { subtotal: 0, serviceFee: 0, total: 0, hourCount: 0 };
     }
 
-    const basePrice =
+    const basePrice = parseFloat(
       placeDetails.price_per_night ||
-      placeDetails.avg_price ||
-      placeDetails.price ||
-      0;
+        placeDetails.avg_price ||
+        placeDetails.price ||
+        0,
+    );
 
-    // Parse number of guests
     const numGuests = parseInt(guests, 10) || 1;
 
-    // Since we only have single date selection, assume 1 night
-    const nights = 1;
-    const subtotal = parseFloat(basePrice) * nights * numGuests;
-    const serviceFee = subtotal * 0; // 10% service fee
+    let subtotal = basePrice * hourCount;
+    if (chargePerGuest) subtotal *= numGuests;
+
+    const serviceFee = 0;
     const total = subtotal + serviceFee;
 
-    return { subtotal, serviceFee, total };
+    return { subtotal, serviceFee, total, hourCount };
   };
 
   const days = getDaysInMonth(currentMonth);
@@ -341,10 +406,25 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
   const bookingTotal = calculateTotal();
 
   const handlePayAndBook = async () => {
-    if (!selectedDate || !selectedTimeSlot || !guests) {
+    if (!selectedDate || selectedTimeSlots.length === 0) {
       Alert.alert(
         "Incomplete Booking",
-        "Please select date, time slot, and number of guests.",
+        "Please select a date and time slot(s).",
+        [{ text: "OK" }],
+      );
+      return;
+    }
+    if (chargePerGuest && !guests) {
+      Alert.alert("Incomplete Booking", "Please enter the number of guests.", [
+        { text: "OK" },
+      ]);
+      return;
+    }
+
+    if (allowMultipleHours && !areHourSlotsConsecutive(selectedTimeSlots)) {
+      Alert.alert(
+        "Select consecutive hours",
+        "Please choose adjacent time slots (e.g. 6:00 PM, 7:00 PM, 8:00 PM) with no gaps.",
         [{ text: "OK" }],
       );
       return;
@@ -372,15 +452,18 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
         return;
       }
 
-      // Combine date + time slot into ISO datetime (e.g. "2025-01-27T10:00:00")
-      const dateStr = selectedDate.toISOString().split("T")[0];
-      const mins = parseTimeToMinutes(selectedTimeSlot);
-      const h = Math.floor(mins / 60) % 24;
-      const m = mins % 60;
-      const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-      const bookingDateTime = `${dateStr}T${timeStr}:00.000Z`;
+      // Venue-local wall time (e.g. IST). Backend loads places.timezone, converts to UTC, stores in DB.
+      const startSlot = sortSlotsByTime(selectedTimeSlots)[0];
+      const y = selectedDate.getFullYear();
+      const mo = String(selectedDate.getMonth() + 1).padStart(2, "0");
+      const d = String(selectedDate.getDate()).padStart(2, "0");
+      const mins = parseTimeToMinutes(startSlot);
+      const hh = String(Math.floor(mins / 60) % 24).padStart(2, "0");
+      const mm = String(mins % 60).padStart(2, "0");
+      const bookingDateTimeLocal = `${y}-${mo}-${d}T${hh}:${mm}:00`;
+      const venueTimezone = placeDetails?.timezone || "UTC";
 
-      const numberOfGuests = parseInt(guests, 10) || 0;
+      const numberOfGuests = chargePerGuest ? parseInt(guests, 10) || 0 : 1;
 
       const res = await fetch(`${API_BASE}/bookings/create-and-order`, {
         method: "POST",
@@ -391,10 +474,12 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
         body: JSON.stringify({
           userId: user.id,
           placeId,
-          bookingDateTime,
+          bookingDateTimeLocal,
+          timezone: venueTimezone,
           amountInr: total,
           currency: "INR",
           number_of_guests: numberOfGuests,
+          duration_hours: Math.max(1, selectedTimeSlots.length),
         }),
       });
 
@@ -472,7 +557,10 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
       };
 
       const verifyUrl = `${API_BASE}/payments/razorpay/verify`;
-      console.log("[Booking] Razorpay response keys:", Object.keys(razorpayData));
+      console.log(
+        "[Booking] Razorpay response keys:",
+        Object.keys(razorpayData),
+      );
       console.log("[Booking] Verify URL:", verifyUrl);
       console.log("[Booking] Payload has all fields:", {
         order_id: !!payload.razorpay_order_id,
@@ -507,7 +595,9 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
         details: verifyData?.details,
       });
       if (verifyRes.status === 404) {
-        console.error("[Booking] 404 - verify endpoint not found. Check API_BASE and path.");
+        console.error(
+          "[Booking] 404 - verify endpoint not found. Check API_BASE and path.",
+        );
       }
 
       if (verifyRes.ok && verifyData.status === "SUCCESS") {
@@ -521,7 +611,7 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
           await new Promise((r) => setTimeout(r, 1500));
           const statusRes = await fetch(
             `${API_BASE}/payments/razorpay/status?bookingId=${data.bookingId}`,
-            { headers: { "ngrok-skip-browser-warning": "true" } }
+            { headers: { "ngrok-skip-browser-warning": "true" } },
           );
           if (statusRes.ok) {
             statusData = await statusRes.json();
@@ -561,9 +651,11 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
         err.message || "Failed to create booking. Please try again.",
       );
       setShowPaymentFailed(true);
-      Alert.alert("Debug: Error", `Type: ${err?.name || "Error"}\nMessage: ${err?.message || String(err)}`, [
-        { text: "OK" },
-      ]);
+      Alert.alert(
+        "Debug: Error",
+        `Type: ${err?.name || "Error"}\nMessage: ${err?.message || String(err)}`,
+        [{ text: "OK" }],
+      );
     } finally {
       setPaying(false);
     }
@@ -767,48 +859,75 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
                       !selectedDate && styles.timeSlotTitleDisabled,
                     ]}
                   >
-                    Select time
+                    {allowMultipleHours ? "Select hours" : "Select time"}
                   </Text>
+                  {allowMultipleHours &&
+                  selectedDate &&
+                  timeSlots.length > 0 ? (
+                    <Text style={styles.timeSlotSub}>
+                      Tap consecutive 1-hour slots to book multiple hours.
+                      Selected: {selectedTimeSlots.length}
+                    </Text>
+                  ) : null}
                   {selectedDate && timeSlots.length === 0 ? (
                     <Text style={styles.timeSlotClosedText}>
                       Place is closed on this day
                     </Text>
+                  ) : loadingSlots ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={colors.primary}
+                      style={{ marginVertical: 16 }}
+                    />
                   ) : (
-                  <View style={styles.timeSlotGrid}>
-                    {timeSlots.map((timeSlot, index) => {
-                      const isSelected = selectedTimeSlot === timeSlot;
-                      const isDisabled = !selectedDate;
-                      return (
-                        <TouchableOpacity
-                          key={index}
-                          style={[
-                            styles.timeSlotButton,
-                            isSelected && styles.timeSlotButtonSelected,
-                            !isDisabled &&
-                              !isSelected &&
-                              styles.timeSlotButtonEnabled,
-                            isDisabled && styles.timeSlotButtonDisabled,
-                          ]}
-                          onPress={() => handleTimeSlotPress(timeSlot)}
-                          disabled={isDisabled}
-                          activeOpacity={0.7}
-                        >
-                          <Text
+                    <View style={styles.timeSlotGrid}>
+                      {timeSlots.map((timeSlot, index) => {
+                        const isSelected = selectedTimeSlots.includes(timeSlot);
+                        const isBooked =
+                          !allowOverlapping && isSlotBooked(timeSlot);
+                        const isDisabled = !selectedDate || isBooked;
+                        return (
+                          <TouchableOpacity
+                            key={index}
                             style={[
-                              styles.timeSlotText,
-                              isSelected && styles.timeSlotTextSelected,
+                              styles.timeSlotButton,
+                              isSelected && styles.timeSlotButtonSelected,
+                              isBooked && styles.timeSlotButtonBooked,
                               !isDisabled &&
                                 !isSelected &&
-                                styles.timeSlotTextEnabled,
-                              isDisabled && styles.timeSlotTextDisabled,
+                                styles.timeSlotButtonEnabled,
+                              isDisabled &&
+                                !isBooked &&
+                                styles.timeSlotButtonDisabled,
                             ]}
+                            onPress={() => handleTimeSlotPress(timeSlot)}
+                            disabled={isDisabled}
+                            activeOpacity={0.7}
                           >
-                            {timeSlot}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+                            <Text
+                              style={[
+                                styles.timeSlotText,
+                                isSelected && styles.timeSlotTextSelected,
+                                isBooked && styles.timeSlotTextBooked,
+                                !isDisabled &&
+                                  !isSelected &&
+                                  styles.timeSlotTextEnabled,
+                                isDisabled &&
+                                  !isBooked &&
+                                  styles.timeSlotTextDisabled,
+                              ]}
+                            >
+                              {timeSlot}
+                            </Text>
+                            {isBooked && (
+                              <Text style={styles.timeSlotBookedLabel}>
+                                Booked
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
                   )}
                 </View>
 
@@ -817,8 +936,7 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
                   <Text
                     style={[
                       styles.guestsTitle,
-                      (!selectedDate || !selectedTimeSlot) &&
-                        styles.guestsTitleDisabled,
+                      guestsFieldDisabled && styles.guestsTitleDisabled,
                     ]}
                   >
                     Number of guests
@@ -826,7 +944,7 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
                   <View
                     style={[
                       styles.guestsInputContainer,
-                      (!selectedDate || !selectedTimeSlot) &&
+                      guestsFieldDisabled &&
                         styles.guestsInputContainerDisabled,
                     ]}
                   >
@@ -839,15 +957,24 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
                     <TextInput
                       style={[
                         styles.guestsInput,
-                        (!selectedDate || !selectedTimeSlot) &&
-                          styles.guestsInputDisabled,
+                        guestsFieldDisabled && styles.guestsInputDisabled,
                       ]}
-                      placeholder="Enter number of guests"
+                      placeholder={
+                        chargePerGuest
+                          ? "Enter number of guests"
+                          : "Not used for pricing"
+                      }
                       placeholderTextColor={colors.textSecondary}
-                      value={guests}
+                      value={chargePerGuest ? guests : ""}
                       onChangeText={setGuests}
                       keyboardType="numeric"
-                      editable={!!(selectedDate && selectedTimeSlot)}
+                      editable={
+                        !!(
+                          selectedDate &&
+                          selectedTimeSlots.length > 0 &&
+                          chargePerGuest
+                        )
+                      }
                     />
                   </View>
                 </View>
@@ -956,8 +1083,11 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
                             placeDetails?.avg_price ||
                             placeDetails?.price ||
                             0}{" "}
-                          × {parseInt(guests, 10) || 0} guest
-                          {parseInt(guests, 10) !== 1 ? "s" : ""}
+                          × {bookingTotal.hourCount || 0} hour
+                          {(bookingTotal.hourCount || 0) !== 1 ? "s" : ""}
+                          {chargePerGuest
+                            ? ` × ${parseInt(guests, 10) || 0} guest${parseInt(guests, 10) !== 1 ? "s" : ""}`
+                            : ""}
                         </Text>
                         <Text style={styles.breakdownValue}>
                           ₹{bookingTotal.subtotal.toFixed(2)}
@@ -1231,8 +1361,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontFamily: fonts.semiBold,
     color: colors.text,
-    marginBottom: 16,
+    marginBottom: 8,
     paddingHorizontal: 20,
+  },
+  timeSlotSub: {
+    fontSize: 13,
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
+    paddingHorizontal: 20,
+    marginBottom: 14,
+    lineHeight: 18,
   },
   timeSlotTitleDisabled: {
     opacity: 0.4,
@@ -1292,6 +1430,22 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     opacity: 0.6,
   },
+  timeSlotButtonBooked: {
+    backgroundColor: colors.background,
+    borderColor: colors.border,
+    borderStyle: "dashed",
+    opacity: 0.55,
+  },
+  timeSlotTextBooked: {
+    color: colors.textSecondary,
+    textDecorationLine: "line-through",
+  },
+  timeSlotBookedLabel: {
+    fontSize: 10,
+    fontFamily: fonts.regular,
+    color: colors.error,
+    marginTop: 2,
+  },
   guestsContainer: {
     paddingHorizontal: 20,
     paddingTop: 20,
@@ -1332,7 +1486,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   guestsInputDisabled: {
-    color: colors.text,
+    color: colors.textSecondary,
   },
   footer: {
     paddingHorizontal: 20,

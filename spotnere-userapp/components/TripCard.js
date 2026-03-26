@@ -16,45 +16,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
 
-// Parse booking_date_time from bookings table - display as stored (no timezone conversion)
-// Stored format: "2025-01-27T10:00:00.000Z" - user's selected time is stored as-is
-const formatBookingDate = (isoStr) => {
-  if (!isoStr) return "—";
-  try {
-    const match = String(isoStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (!match) return isoStr;
-    const [, year, month, day] = match;
-    const d = new Date(
-      parseInt(year, 10),
-      parseInt(month, 10) - 1,
-      parseInt(day, 10),
-    );
-    return d.toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  } catch {
-    return isoStr;
-  }
-};
-
-const formatBookingTime = (isoStr) => {
-  if (!isoStr) return "";
-  try {
-    const match = String(isoStr).match(/T(\d{2}):(\d{2})/);
-    if (!match) return "";
-    const hour = parseInt(match[1], 10);
-    const minute = parseInt(match[2], 10);
-    const ampm = hour >= 12 ? "PM" : "AM";
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${minute.toString().padStart(2, "0")} ${ampm}`;
-  } catch {
-    return "";
-  }
-};
-
 const getStatusColor = (status) => {
   switch ((status || "").toUpperCase()) {
     case "PAID":
@@ -72,8 +33,8 @@ const getStatusColor = (status) => {
 };
 
 const TripCard = ({ trip, onPress }) => {
-  const dateStr = formatBookingDate(trip.bookingDateTime);
-  const timeStr = formatBookingTime(trip.bookingDateTime);
+  const dateStr = trip.bookingDateFormatted || "—";
+  const timeStr = trip.bookingTimeFormatted || "";
   const statusColor = getStatusColor(trip.paymentStatus);
 
   return (
@@ -82,7 +43,6 @@ const TripCard = ({ trip, onPress }) => {
       onPress={() => onPress && onPress(trip)}
       activeOpacity={0.85}
     >
-      {/* Image */}
       <View style={styles.imageWrap}>
         <ExpoImage
           source={
@@ -98,7 +58,6 @@ const TripCard = ({ trip, onPress }) => {
         />
       </View>
 
-      {/* Content */}
       <View style={styles.content}>
         <Text style={styles.title} numberOfLines={2}>
           {trip.title}

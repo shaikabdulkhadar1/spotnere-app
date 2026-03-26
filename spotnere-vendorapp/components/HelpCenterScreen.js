@@ -20,19 +20,19 @@ import { fonts } from "../constants/fonts";
 const HelpCenterScreen = ({ onBack }) => {
   const handleEmailPress = () => {
     Linking.openURL("mailto:support@spotnere.com").catch((err) =>
-      console.error("Error opening email:", err)
+      console.error("Error opening email:", err),
     );
   };
 
   const handleWebsitePress = () => {
     Linking.openURL("https://www.spotnere.com").catch((err) =>
-      console.error("Error opening website:", err)
+      console.error("Error opening website:", err),
     );
   };
 
   const handlePhonePress = () => {
     Linking.openURL("tel:+1234567890").catch((err) =>
-      console.error("Error opening phone:", err)
+      console.error("Error opening phone:", err),
     );
   };
 
@@ -50,7 +50,7 @@ const HelpCenterScreen = ({ onBack }) => {
     detail,
     description,
     onPress,
-    showArrow = true
+    showArrow = true,
   ) => {
     return (
       <TouchableOpacity
@@ -136,7 +136,7 @@ const HelpCenterScreen = ({ onBack }) => {
               "Email",
               "support@spotnere.com",
               "Send us an email and we'll respond within 24 hours",
-              handleEmailPress
+              handleEmailPress,
             )}
             <View style={styles.divider} />
             {renderContactItem(
@@ -144,7 +144,7 @@ const HelpCenterScreen = ({ onBack }) => {
               "Website",
               "www.spotnere.com",
               "Visit our website for more information",
-              handleWebsitePress
+              handleWebsitePress,
             )}
             <View style={styles.divider} />
             {renderContactItem(
@@ -152,7 +152,7 @@ const HelpCenterScreen = ({ onBack }) => {
               "Phone",
               "+1 (234) 567-890",
               "Call us during business hours",
-              handlePhonePress
+              handlePhonePress,
             )}
             <View style={styles.divider} />
             {renderContactItem(
@@ -161,7 +161,7 @@ const HelpCenterScreen = ({ onBack }) => {
               "Mon - Fri: 9 AM - 6 PM",
               "We're available Monday through Friday",
               null,
-              false
+              false,
             )}
           </View>
         </View>
@@ -181,31 +181,29 @@ const HelpCenterScreen = ({ onBack }) => {
             ))}
           </View>
         </View>
+        <View style={styles.bottomActions}>
+          <TouchableOpacity
+            style={styles.callButton}
+            onPress={handleCallUsPress}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="call" size={20} color="#FFFFFF" />
+            <Text style={styles.callButtonText}>Call Us</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.chatButton}
+            onPress={handleChatPress}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="chatbubbles-outline"
+              size={20}
+              color={colors.primary}
+            />
+            <Text style={styles.chatButtonText}>Chat With Us</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
-
-      {/* Bottom Action Buttons */}
-      <View style={styles.bottomActions}>
-        <TouchableOpacity
-          style={styles.callButton}
-          onPress={handleCallUsPress}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="call" size={20} color="#FFFFFF" />
-          <Text style={styles.callButtonText}>Call Us</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.chatButton}
-          onPress={handleChatPress}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="chatbubbles-outline"
-            size={20}
-            color={colors.primary}
-          />
-          <Text style={styles.chatButtonText}>Chat With Us</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 };
