@@ -25,9 +25,7 @@ export const getFavorites = async () => {
       return favorites;
     }
     return favoritesCache;
-  } catch (error) {
-    // Fallback to in-memory cache if AsyncStorage is not available
-    console.log("Using in-memory favorites storage");
+  } catch {
     return favoritesCache;
   }
 };
@@ -41,8 +39,7 @@ export const isFavorite = async (placeId) => {
   try {
     const favorites = await getFavorites();
     return favorites.includes(placeId);
-  } catch (error) {
-    console.error("Error checking favorite:", error);
+  } catch {
     return false;
   }
 };
@@ -71,8 +68,7 @@ export const addFavorite = async (placeId) => {
       return true;
     }
     return false;
-  } catch (error) {
-    console.error("Error adding favorite:", error);
+  } catch {
     return false;
   }
 };
@@ -98,8 +94,7 @@ export const removeFavorite = async (placeId) => {
     }
     
     return true;
-  } catch (error) {
-    console.error("Error removing favorite:", error);
+  } catch {
     return false;
   }
 };
@@ -119,8 +114,7 @@ export const toggleFavorite = async (placeId) => {
       await addFavorite(placeId);
       return true;
     }
-  } catch (error) {
-    console.error("Error toggling favorite:", error);
+  } catch {
     return false;
   }
 };
@@ -143,8 +137,7 @@ export const clearFavorites = async () => {
     }
     
     return true;
-  } catch (error) {
-    console.error("Error clearing favorites:", error);
+  } catch {
     return false;
   }
 };
@@ -168,7 +161,6 @@ export const saveFavoriteToDatabase = async (userId, placeId) => {
     await clearFavoritesCache(userId);
     return { success: true, error: null };
   } catch (error) {
-    console.error("Error saving favorite to database:", error);
     return {
       success: false,
       error: error?.data?.error || error.message || "Failed to save favorite",
@@ -195,7 +187,6 @@ export const removeFavoriteFromDatabase = async (userId, placeId) => {
     await clearFavoritesCache(userId);
     return { success: true, error: null };
   } catch (error) {
-    console.error("Error removing favorite from database:", error);
     return {
       success: false,
       error: error?.data?.error || error.message || "Failed to remove favorite",
@@ -214,8 +205,7 @@ export const isFavoriteInDatabase = async (userId, placeId) => {
     if (!userId || !placeId) return false;
     const { favorited } = await api.checkFavorite(userId, placeId);
     return !!favorited;
-  } catch (error) {
-    console.error("Error checking favorite in database:", error);
+  } catch {
     return false;
   }
 };

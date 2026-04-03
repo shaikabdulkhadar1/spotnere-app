@@ -84,8 +84,7 @@ export const getCurrentUser = async () => {
       return JSON.parse(userJson);
     }
     return null;
-  } catch (error) {
-    console.error("Error getting current user:", error);
+  } catch {
     return null;
   }
 };
@@ -98,8 +97,7 @@ export const isLoggedIn = async () => {
   try {
     const authToken = await AsyncStorage.getItem(AUTH_KEY);
     return authToken !== null;
-  } catch (error) {
-    console.error("Error checking login status:", error);
+  } catch {
     return false;
   }
 };
@@ -124,14 +122,12 @@ export const registerUser = async (formData) => {
     await AsyncStorage.setItem(AUTH_KEY, "authenticated");
     await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(formattedUser));
 
-    console.log("✅ User registered successfully:", formattedUser.email);
     return {
       success: true,
       user: formattedUser,
       error: null,
     };
   } catch (error) {
-    console.error("Error registering user:", error);
     return {
       success: false,
       user: null,
@@ -161,14 +157,12 @@ export const loginUser = async (email, password) => {
     await AsyncStorage.setItem(AUTH_KEY, "authenticated");
     await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(formattedUser));
 
-    console.log("✅ User logged in successfully:", formattedUser.email);
     return {
       success: true,
       user: formattedUser,
       error: null,
     };
   } catch (error) {
-    console.error("Error logging in:", error);
     return {
       success: false,
       user: null,
@@ -190,8 +184,7 @@ export const login = async (userData) => {
     // Store user data
     await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
     return true;
-  } catch (error) {
-    console.error("Error logging in:", error);
+  } catch {
     return false;
   }
 };
@@ -205,8 +198,7 @@ export const logout = async () => {
     await AsyncStorage.removeItem(AUTH_KEY);
     await AsyncStorage.removeItem(USER_DATA_KEY);
     return true;
-  } catch (error) {
-    console.error("Error logging out:", error);
+  } catch {
     return false;
   }
 };
@@ -220,8 +212,7 @@ export const updateUserData = async (userData) => {
   try {
     await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
     return true;
-  } catch (error) {
-    console.error("Error updating user data:", error);
+  } catch {
     return false;
   }
 };

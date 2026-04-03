@@ -66,8 +66,7 @@ export const getCachedBookings = async (userId) => {
     }
 
     return null;
-  } catch (error) {
-    console.error("Error getting cached bookings:", error);
+  } catch {
     return null;
   }
 };
@@ -79,7 +78,6 @@ export const getCachedBookings = async (userId) => {
  */
 export const setCachedBookings = async (bookings, userId) => {
   if (!bookings || !Array.isArray(bookings) || !userId) {
-    console.warn("⚠️ Invalid bookings data for caching");
     return;
   }
 
@@ -98,8 +96,8 @@ export const setCachedBookings = async (bookings, userId) => {
       timestamp: timestamp,
     };
     await AsyncStorage.setItem(cacheKey, JSON.stringify(cacheData));
-  } catch (error) {
-    console.error("Error saving bookings cache:", error);
+  } catch {
+    /* ignore */
   }
 };
 
@@ -120,8 +118,8 @@ export const clearBookingsCache = async (userId) => {
         key.startsWith(BOOKINGS_CACHE_KEY)
       );
       await AsyncStorage.multiRemove(cacheKeys);
-    } catch (error) {
-      console.error("Error clearing bookings cache:", error);
+    } catch {
+      /* ignore */
     }
     return;
   }
@@ -135,7 +133,7 @@ export const clearBookingsCache = async (userId) => {
   try {
     const cacheKey = `${BOOKINGS_CACHE_KEY}_${userId}`;
     await AsyncStorage.removeItem(cacheKey);
-  } catch (error) {
-    console.error("Error clearing bookings cache:", error);
+  } catch {
+    /* ignore */
   }
 };

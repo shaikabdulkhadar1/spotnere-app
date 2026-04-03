@@ -17,11 +17,9 @@ const AboutUsScreen = ({ onBack }) => {
       const supported = await Linking.canOpenURL(url);
       if (supported) {
         await Linking.openURL(url);
-      } else {
-        console.log(`Don't know how to open URI: ${url}`);
       }
-    } catch (error) {
-      console.error("Error opening link:", error);
+    } catch {
+      /* ignore */
     }
   };
 

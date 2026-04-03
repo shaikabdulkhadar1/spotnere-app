@@ -15,6 +15,7 @@ import SkeletonCard from "../components/SkeletonCard";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
 import { formatListingPrice } from "../utils/placePrice";
+import { getCachedPlaces, setCachedPlaces } from "../utils/placesCache";
 
 const { width } = Dimensions.get("window");
 
@@ -144,7 +145,19 @@ const HomeScreen = ({
       setLoading(true);
       setError(null);
 
-      const allPlaces = await api.getPlaces(userCountry ? { country: userCountry } : {});
+      const cached = getCachedPlaces(userCountry || null);
+      let allPlaces;
+      if (cached !== null) {
+        allPlaces = cached;
+      } else {
+        allPlaces = await api.getPlaces(
+          userCountry ? { country: userCountry } : {},
+        );
+        setCachedPlaces(
+          Array.isArray(allPlaces) ? allPlaces : [],
+          userCountry || null,
+        );
+      }
 
       if (!allPlaces || allPlaces.length === 0) {
         setAllPlacesData([]);
@@ -220,7 +233,6 @@ const HomeScreen = ({
       setAllPlacesData(sortedPlaces);
       setDisplayedCount(TOP_K);
     } catch (err) {
-      console.error("Error fetching places:", err);
       setError(err.message || "Failed to fetch places");
     } finally {
       setLoading(false);

@@ -11,6 +11,7 @@ import {
   Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { SvgUri } from "react-native-svg";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
 import LoginForm from "../components/LoginForm";
@@ -23,6 +24,11 @@ import UpcomingBookingsScreen from "./UpcomingBookingsScreen";
 import PastBookingsScreen from "./PastBookingsScreen";
 import { getCurrentUser, logout } from "../utils/auth";
 import { useBookings } from "../context/BookingsContext";
+import {
+  DEFAULT_AVATAR_STYLE,
+  getDicebearSvgUri,
+  getStoredAvatarStyle,
+} from "../utils/dicebearAvatar";
 
 const { width } = Dimensions.get("window");
 
@@ -40,10 +46,26 @@ const ProfileScreen = ({ onLoginSuccess, onBack, onTripPress }) => {
   const [selectedTheme, setSelectedTheme] = useState("Light");
   const [showUpcomingBookings, setShowUpcomingBookings] = useState(false);
   const [showPastBookings, setShowPastBookings] = useState(false);
+  const [avatarStyle, setAvatarStyle] = useState(DEFAULT_AVATAR_STYLE);
 
   useEffect(() => {
     checkAuthStatus();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!userData?.id) {
+        if (!cancelled) setAvatarStyle(DEFAULT_AVATAR_STYLE);
+        return;
+      }
+      const stored = await getStoredAvatarStyle(userData.id);
+      if (!cancelled) setAvatarStyle(stored);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userData?.id, showManageProfile]);
 
   const checkAuthStatus = async () => {
     const user = await getCurrentUser();
@@ -85,17 +107,6 @@ const ProfileScreen = ({ onLoginSuccess, onBack, onTripPress }) => {
     setUserData(null);
     setShowLoginForm(false);
     setShowRegisterForm(false);
-  };
-
-  // Generate initials from first name and last name
-  const getInitials = (firstName, lastName) => {
-    const firstInitial =
-      firstName && firstName.length > 0
-        ? firstName.charAt(0).toUpperCase()
-        : "";
-    const lastInitial =
-      lastName && lastName.length > 0 ? lastName.charAt(0).toUpperCase() : "";
-    return `${firstInitial}${lastInitial}` || "U"; // Default to "U" if no name
   };
 
   const accountItems = [
@@ -421,12 +432,20 @@ const ProfileScreen = ({ onLoginSuccess, onBack, onTripPress }) => {
         <View style={styles.profileCardContent}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {getInitials(
-                  userData?.firstName || "",
-                  userData?.lastName || "",
-                )}
-              </Text>
+              <SvgUri
+                uri={getDicebearSvgUri(userData, avatarStyle)}
+                width={60}
+                height={60}
+                fallback={
+                  <View style={styles.avatarFallback}>
+                    <Ionicons
+                      name="person"
+                      size={28}
+                      color={colors.textSecondary}
+                    />
+                  </View>
+                }
+              />
             </View>
           </View>
           <View style={styles.profileInfo}>
@@ -706,14 +725,17 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.surface,
+    overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
   },
-  avatarText: {
-    fontSize: 24,
-    fontFamily: fonts.bold,
-    color: colors.cardBackground,
+  avatarFallback: {
+    width: 60,
+    height: 60,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: colors.surface,
   },
   profileInfo: {
     flex: 1,

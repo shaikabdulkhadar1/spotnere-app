@@ -84,8 +84,7 @@ export const getCachedFavorites = async (userId, country = null) => {
     }
 
     return null;
-  } catch (error) {
-    console.error("Error getting cached favorites:", error);
+  } catch {
     return null;
   }
 };
@@ -98,7 +97,6 @@ export const getCachedFavorites = async (userId, country = null) => {
  */
 export const setCachedFavorites = async (places, userId, country = null) => {
   if (!places || !Array.isArray(places) || !userId) {
-    console.warn("⚠️ Invalid favorites data for caching");
     return;
   }
 
@@ -121,8 +119,7 @@ export const setCachedFavorites = async (places, userId, country = null) => {
       timestamp: timestamp,
     };
     await AsyncStorage.setItem(cacheKey, JSON.stringify(cacheData));
-  } catch (error) {
-    console.error("Error saving favorites cache:", error);
+  } catch {
     // Continue with in-memory cache even if AsyncStorage fails
   }
 };
@@ -146,8 +143,8 @@ export const clearFavoritesCache = async (userId) => {
         key.startsWith(FAVORITES_CACHE_KEY)
       );
       await AsyncStorage.multiRemove(cacheKeys);
-    } catch (error) {
-      console.error("Error clearing favorites cache:", error);
+    } catch {
+      /* ignore */
     }
     return;
   }
@@ -163,8 +160,8 @@ export const clearFavoritesCache = async (userId) => {
   try {
     const cacheKey = `${FAVORITES_CACHE_KEY}_${userId}`;
     await AsyncStorage.removeItem(cacheKey);
-  } catch (error) {
-    console.error("Error clearing favorites cache:", error);
+  } catch {
+    /* ignore */
   }
 };
 

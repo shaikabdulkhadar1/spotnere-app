@@ -66,7 +66,6 @@ const ReelsScreen = ({ userCountry, onPlacePress, onBack }) => {
 
       setReels(formatted);
     } catch (err) {
-      console.error("Error fetching reels:", err);
       setError(err.message || "Failed to load reels");
     } finally {
       setLoading(false);

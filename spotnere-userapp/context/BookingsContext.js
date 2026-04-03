@@ -56,12 +56,12 @@ export const BookingsProvider = ({ children }) => {
         return;
       }
 
-      // Show cached data immediately, then refresh from API
       const cached = await getCachedBookings(user.id);
       if (cached) {
         setBookings(cached);
         setLastFetchedUserId(user.id);
         setLoading(false);
+        return;
       }
 
       const fetched = await fetchBookingsFromApi(user.id);
@@ -69,7 +69,6 @@ export const BookingsProvider = ({ children }) => {
       setLastFetchedUserId(user.id);
       await setCachedBookings(fetched, user.id);
     } catch (err) {
-      console.error("Error fetching bookings:", err);
       setError(err.message || "Failed to load bookings");
       setBookings([]);
     } finally {

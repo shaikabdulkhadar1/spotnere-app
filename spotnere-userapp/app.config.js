@@ -3,7 +3,8 @@
  * This file allows us to use environment variables from .env file
  */
 
-require("dotenv").config();
+const path = require("path");
+require("dotenv").config({ path: path.resolve(__dirname, ".env") });
 
 export default {
   expo: {
@@ -45,10 +46,24 @@ export default {
         backgroundColor: "#ffffff",
       },
       permissions: ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"],
+      config: {
+        googleMaps: {
+          apiKey: process.env.GOOGLE_MAPS_API_KEY || "",
+        },
+      },
     },
     web: {
       favicon: "./assets/favicon.png",
     },
+    plugins: [
+      [
+        "expo-maps",
+        {
+          requestLocationPermission: true,
+          locationPermission: "Allow $(PRODUCT_NAME) to use your location",
+        },
+      ],
+    ],
     extra: {
       supabaseUrl: process.env.SUPABASE_URL,
       supabaseAnonKey:

@@ -22,9 +22,7 @@ export const getTrips = async () => {
       return trips;
     }
     return tripsCache;
-  } catch (error) {
-    // Fallback to in-memory cache if AsyncStorage is not available
-    console.log("Using in-memory trips storage");
+  } catch {
     return tripsCache;
   }
 };
@@ -38,8 +36,7 @@ export const isInTrips = async (placeId) => {
   try {
     const trips = await getTrips();
     return trips.includes(placeId);
-  } catch (error) {
-    console.error("Error checking trip:", error);
+  } catch {
     return false;
   }
 };
@@ -68,8 +65,7 @@ export const addTrip = async (placeId) => {
       return true;
     }
     return false;
-  } catch (error) {
-    console.error("Error adding trip:", error);
+  } catch {
     return false;
   }
 };
@@ -95,8 +91,7 @@ export const removeTrip = async (placeId) => {
     }
 
     return true;
-  } catch (error) {
-    console.error("Error removing trip:", error);
+  } catch {
     return false;
   }
 };
@@ -116,8 +111,7 @@ export const toggleTrip = async (placeId) => {
       await addTrip(placeId);
       return true;
     }
-  } catch (error) {
-    console.error("Error toggling trip:", error);
+  } catch {
     return false;
   }
 };
@@ -140,8 +134,7 @@ export const clearTrips = async () => {
     }
 
     return true;
-  } catch (error) {
-    console.error("Error clearing trips:", error);
+  } catch {
     return false;
   }
 };

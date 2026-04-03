@@ -94,7 +94,6 @@ const PasswordSecurityScreen = ({ onBack }) => {
 
       Alert.alert("Success", "Password updated successfully");
     } catch (error) {
-      console.error("Error saving password:", error);
       Alert.alert("Error", error.message || "Failed to save password");
     } finally {
       setIsSaving(false);

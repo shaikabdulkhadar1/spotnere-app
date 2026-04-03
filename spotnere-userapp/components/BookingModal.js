@@ -269,8 +269,7 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
       .then((data) => {
         if (!cancelled) setBookedSlots(data.bookedSlots || []);
       })
-      .catch((err) => {
-        console.warn("Failed to fetch booked slots:", err);
+      .catch(() => {
         if (!cancelled) setBookedSlots([]);
       })
       .finally(() => {
@@ -529,8 +528,8 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
               method: "DELETE",
               headers: { "ngrok-skip-browser-warning": "true" },
             });
-          } catch (e) {
-            console.warn("Failed to delete cancelled booking:", e);
+          } catch {
+            /* ignore */
           }
           setShowPaymentCancelled(true);
           return;
@@ -557,16 +556,6 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
       };
 
       const verifyUrl = `${API_BASE}/payments/razorpay/verify`;
-      console.log(
-        "[Booking] Razorpay response keys:",
-        Object.keys(razorpayData),
-      );
-      console.log("[Booking] Verify URL:", verifyUrl);
-      console.log("[Booking] Payload has all fields:", {
-        order_id: !!payload.razorpay_order_id,
-        payment_id: !!payload.razorpay_payment_id,
-        signature: !!payload.razorpay_signature,
-      });
 
       const verifyRes = await fetch(verifyUrl, {
         method: "POST",
@@ -581,23 +570,8 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
       let verifyData = {};
       try {
         verifyData = JSON.parse(verifyText);
-      } catch (parseErr) {
-        console.error("[Booking] Verify response not JSON:", parseErr);
-        console.error("[Booking] Raw response:", verifyText?.slice(0, 300));
-      }
-      console.log("[Booking] Verify response:", {
-        status: verifyRes.status,
-        ok: verifyRes.ok,
-        path: verifyData?.path,
-        method: verifyData?.method,
-        dataStatus: verifyData?.status,
-        error: verifyData?.error,
-        details: verifyData?.details,
-      });
-      if (verifyRes.status === 404) {
-        console.error(
-          "[Booking] 404 - verify endpoint not found. Check API_BASE and path.",
-        );
+      } catch {
+        /* ignore */
       }
 
       if (verifyRes.ok && verifyData.status === "SUCCESS") {

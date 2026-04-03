@@ -48,8 +48,7 @@ const HelpCenterScreen = ({ onBack }) => {
           await Linking.openURL(url);
         }
       }
-    } catch (error) {
-      console.error("Error making phone call:", error);
+    } catch {
       // Show the phone number so user can manually dial
       Alert.alert(
         "Unable to Open Phone",
@@ -61,8 +60,6 @@ const HelpCenterScreen = ({ onBack }) => {
 
   const handleChat = () => {
     // TODO: Implement chat functionality
-    // For now, we'll show an alert or open a chat interface
-    console.log("Chat with us clicked");
     // You can integrate with a chat service like Intercom, Zendesk, etc.
   };
 
@@ -71,11 +68,9 @@ const HelpCenterScreen = ({ onBack }) => {
       const supported = await Linking.canOpenURL(url);
       if (supported) {
         await Linking.openURL(url);
-      } else {
-        console.log(`Don't know how to open URI: ${url}`);
       }
-    } catch (error) {
-      console.error(`Error opening ${label}:`, error);
+    } catch {
+      /* ignore */
     }
   };
 

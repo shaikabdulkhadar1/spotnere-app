@@ -22,9 +22,7 @@ export const getReels = async () => {
       return reels;
     }
     return reelsCache;
-  } catch (error) {
-    // Fallback to in-memory cache if AsyncStorage is not available
-    console.log("Using in-memory reels storage");
+  } catch {
     return reelsCache;
   }
 };
@@ -38,8 +36,7 @@ export const isInReels = async (placeId) => {
   try {
     const reels = await getReels();
     return reels.includes(placeId);
-  } catch (error) {
-    console.error("Error checking reel:", error);
+  } catch {
     return false;
   }
 };
@@ -68,8 +65,7 @@ export const addReel = async (placeId) => {
       return true;
     }
     return false;
-  } catch (error) {
-    console.error("Error adding reel:", error);
+  } catch {
     return false;
   }
 };
@@ -95,8 +91,7 @@ export const removeReel = async (placeId) => {
     }
 
     return true;
-  } catch (error) {
-    console.error("Error removing reel:", error);
+  } catch {
     return false;
   }
 };
@@ -116,8 +111,7 @@ export const toggleReel = async (placeId) => {
       await addReel(placeId);
       return true;
     }
-  } catch (error) {
-    console.error("Error toggling reel:", error);
+  } catch {
     return false;
   }
 };
@@ -140,8 +134,7 @@ export const clearReels = async () => {
     }
 
     return true;
-  } catch (error) {
-    console.error("Error clearing reels:", error);
+  } catch {
     return false;
   }
 };

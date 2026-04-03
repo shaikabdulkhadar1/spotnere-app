@@ -21,7 +21,6 @@ const CACHE_EXPIRY_MS = 5 * 60 * 1000;
 export const getCachedPlaces = (country = null) => {
   // Check if cache exists
   if (!placesCache.allPlaces || !placesCache.timestamp) {
-    console.log("📦 No cached places found");
     return null;
   }
 
@@ -29,20 +28,15 @@ export const getCachedPlaces = (country = null) => {
   const now = Date.now();
   const cacheAge = now - placesCache.timestamp;
   if (cacheAge > CACHE_EXPIRY_MS) {
-    console.log("📦 Cache expired, clearing...");
     clearCache();
     return null;
   }
 
   // If country is specified, check if it matches cached country
   if (country && placesCache.country !== country) {
-    console.log(
-      `📦 Cache country mismatch (cached: ${placesCache.country}, requested: ${country})`
-    );
     return null;
   }
 
-  console.log("📦 Using cached places data");
   return placesCache.allPlaces;
 };
 
@@ -53,7 +47,6 @@ export const getCachedPlaces = (country = null) => {
  */
 export const setCachedPlaces = (places, country = null) => {
   if (!places || !Array.isArray(places)) {
-    console.warn("⚠️ Invalid places data for caching");
     return;
   }
 
@@ -62,10 +55,6 @@ export const setCachedPlaces = (places, country = null) => {
     country: country,
     timestamp: Date.now(),
   };
-
-  console.log(
-    `📦 Cached ${places.length} places${country ? ` for ${country}` : ""}`
-  );
 };
 
 /**
@@ -77,5 +66,4 @@ export const clearCache = () => {
     country: null,
     timestamp: null,
   };
-  console.log("📦 Cache cleared");
 };

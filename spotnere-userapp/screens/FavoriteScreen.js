@@ -82,7 +82,6 @@ const FavoriteScreen = ({ userCountry, onPlacePress, onBack }) => {
 
       setFavoritePlaces(formatted);
     } catch (err) {
-      console.error("Error fetching favorite places:", err);
       setError(err.message || "Failed to load favorites");
     } finally {
       setLoading(false);

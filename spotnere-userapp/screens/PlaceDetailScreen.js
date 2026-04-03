@@ -31,6 +31,7 @@ import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
+import { CircleUserRound } from "lucide-react-native";
 import { Image as ExpoImage } from "expo-image";
 import { api } from "../api/client";
 import { colors } from "../constants/colors";
@@ -863,16 +864,13 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
                         >
                           <View style={styles.reviewTop}>
                             <View style={styles.reviewUser}>
-                              <ExpoImage
-                                source={{
-                                  uri:
-                                    review.user_avatar ||
-                                    review.avatar ||
-                                    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop",
-                                }}
-                                style={styles.avatar}
-                                contentFit="cover"
-                              />
+                              <View style={styles.avatar}>
+                                <CircleUserRound
+                                  size={45}
+                                  color={colors.textSecondary}
+                                  strokeWidth={1.75}
+                                />
+                              </View>
                               <View style={{ flex: 1 }}>
                                 <Text style={styles.userName} numberOfLines={1}>
                                   {name}
@@ -1534,8 +1532,10 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
   },
   userName: { fontSize: 15, fontFamily: fonts.semiBold, color: colors.text },
   userRole: {

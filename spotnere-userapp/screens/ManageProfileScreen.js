@@ -11,13 +11,23 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { SvgUri } from "react-native-svg";
 import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
 import { api } from "../api/client";
 import { updateUserData, getCurrentUser } from "../utils/auth";
 import { Country, State, City } from "country-state-city";
+import {
+  AVATAR_STYLE_OPTIONS,
+  DEFAULT_AVATAR_STYLE,
+  getDicebearPngUri,
+  getDicebearSvgUri,
+  getStoredAvatarStyle,
+  setStoredAvatarStyle,
+} from "../utils/dicebearAvatar";
 
 const { width, height } = Dimensions.get("window");
 
@@ -41,6 +51,8 @@ const ManageProfileScreen = ({ userData: initialUserData, onBack }) => {
   const [showCountryModal, setShowCountryModal] = useState(false);
   const [showStateModal, setShowStateModal] = useState(false);
   const [showCityModal, setShowCityModal] = useState(false);
+  const [avatarStyle, setAvatarStyle] = useState(DEFAULT_AVATAR_STYLE);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
 
   // Get countries, states, and cities from library
   const countries = Country.getAllCountries();
@@ -69,16 +81,18 @@ const ManageProfileScreen = ({ userData: initialUserData, onBack }) => {
     }
   }, [initialUserData]);
 
-  // Generate initials from first name and last name
-  const getInitials = (firstName, lastName) => {
-    const firstInitial =
-      firstName && firstName.length > 0
-        ? firstName.charAt(0).toUpperCase()
-        : "";
-    const lastInitial =
-      lastName && lastName.length > 0 ? lastName.charAt(0).toUpperCase() : "";
-    return `${firstInitial}${lastInitial}` || "U";
-  };
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const id = userData?.id || initialUserData?.id;
+      if (!id) return;
+      const stored = await getStoredAvatarStyle(id);
+      if (!cancelled) setAvatarStyle(stored);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userData?.id, initialUserData?.id]);
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -147,7 +161,6 @@ const ManageProfileScreen = ({ userData: initialUserData, onBack }) => {
 
       Alert.alert("Success", "Profile updated successfully");
     } catch (error) {
-      console.error("Error saving profile:", error);
       Alert.alert("Error", error?.data?.error || error.message || "Failed to save profile");
     } finally {
       setIsSaving(false);
@@ -287,12 +300,49 @@ const ManageProfileScreen = ({ userData: initialUserData, onBack }) => {
       {/* Profile Avatar Section */}
       <View style={styles.profileCard}>
         <View style={styles.avatarContainer}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {getInitials(userData?.firstName || "", userData?.lastName || "")}
-            </Text>
-          </View>
+          {isEditing ? (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => setShowAvatarPicker(true)}
+              style={[styles.avatar, styles.avatarEditable]}
+            >
+              <SvgUri
+                uri={getDicebearSvgUri(userData, avatarStyle)}
+                width={80}
+                height={80}
+                fallback={
+                  <View style={styles.avatarFallback}>
+                    <Ionicons
+                      name="person"
+                      size={36}
+                      color={colors.textSecondary}
+                    />
+                  </View>
+                }
+              />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.avatar}>
+              <SvgUri
+                uri={getDicebearSvgUri(userData, avatarStyle)}
+                width={80}
+                height={80}
+                fallback={
+                  <View style={styles.avatarFallback}>
+                    <Ionicons
+                      name="person"
+                      size={36}
+                      color={colors.textSecondary}
+                    />
+                  </View>
+                }
+              />
+            </View>
+          )}
         </View>
+        {isEditing ? (
+          <Text style={styles.avatarHint}>Tap avatar to choose a style</Text>
+        ) : null}
         <Text style={styles.userName}>{userData?.name || "User"}</Text>
         <Text style={styles.userEmail}>{userData?.email || ""}</Text>
       </View>
@@ -433,6 +483,63 @@ const ManageProfileScreen = ({ userData: initialUserData, onBack }) => {
         showCityModal,
         () => setShowCityModal(false)
       )}
+
+      <Modal
+        visible={showAvatarPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAvatarPicker(false)}
+      >
+        <View style={styles.avatarPickerOverlay}>
+          <TouchableOpacity
+            style={styles.avatarPickerBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowAvatarPicker(false)}
+          />
+          <View style={styles.avatarPickerSheet}>
+            <View style={styles.avatarPickerHeader}>
+              <Text style={styles.avatarPickerTitle}>Choose avatar style</Text>
+              <TouchableOpacity
+                onPress={() => setShowAvatarPicker(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={AVATAR_STYLE_OPTIONS}
+              numColumns={3}
+              keyExtractor={(item) => item.id}
+              columnWrapperStyle={styles.avatarPickerRow}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.avatarPickerCell,
+                    avatarStyle === item.id && styles.avatarPickerCellSelected,
+                  ]}
+                  activeOpacity={0.85}
+                  onPress={async () => {
+                    if (userData?.id) {
+                      await setStoredAvatarStyle(userData.id, item.id);
+                    }
+                    setAvatarStyle(item.id);
+                    setShowAvatarPicker(false);
+                  }}
+                >
+                  <Image
+                    source={{ uri: getDicebearPngUri(userData, item.id, 128) }}
+                    style={styles.avatarPickerThumb}
+                  />
+                  <Text numberOfLines={2} style={styles.avatarPickerLabel}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
@@ -503,14 +610,89 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.surface,
+    overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
   },
-  avatarText: {
-    fontSize: 32,
-    fontFamily: fonts.bold,
-    color: colors.cardBackground,
+  avatarFallback: {
+    width: 80,
+    height: 80,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+  },
+  avatarEditable: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  avatarHint: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 8,
+    fontFamily: fonts.regular,
+  },
+  avatarPickerOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  avatarPickerBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    zIndex: 0,
+  },
+  avatarPickerSheet: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 12,
+    paddingBottom: 28,
+    maxHeight: height * 0.58,
+    zIndex: 1,
+    elevation: 8,
+  },
+  avatarPickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  avatarPickerTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: colors.text,
+    fontFamily: fonts.regular,
+  },
+  avatarPickerRow: {
+    justifyContent: "space-between",
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  avatarPickerCell: {
+    width: (width - 24 - 32) / 3,
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  avatarPickerCellSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.surface,
+  },
+  avatarPickerThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    marginBottom: 6,
+  },
+  avatarPickerLabel: {
+    fontSize: 11,
+    textAlign: "center",
+    color: colors.textSecondary,
+    fontFamily: fonts.regular,
   },
   userName: {
     fontSize: 22,

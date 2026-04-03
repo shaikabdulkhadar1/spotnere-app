@@ -34,8 +34,6 @@ import ProfileScreen from "./screens/ProfileScreen";
 import { BookingsProvider } from "./context/BookingsContext";
 import { colors } from "./constants/colors";
 import { fonts } from "./constants/fonts";
-import { getCachedPlaces, setCachedPlaces } from "./utils/placesCache";
-
 // Error Boundary Styles (defined before ErrorBoundary component)
 const errorBoundaryStyles = StyleSheet.create({
   errorContainer: {
@@ -78,9 +76,7 @@ class ErrorBoundary extends React.Component {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error, errorInfo) {
-    console.error("Error caught by boundary:", error, errorInfo);
-  }
+  componentDidCatch() {}
 
   render() {
     if (this.state.hasError) {
@@ -320,7 +316,6 @@ export default function App() {
     const initTimer = setTimeout(() => {
       // Get location to determine country for filtering
       getLocationAndSetCountry().catch((err) => {
-        console.error("Error getting location:", err);
         setError(err.message || "Failed to get location");
         setLoading(false);
       });
@@ -376,8 +371,7 @@ export default function App() {
           latitude,
           longitude,
         });
-      } catch (geocodeError) {
-        console.warn("Reverse geocoding failed:", geocodeError);
+      } catch {
         setLoading(false);
         return;
       }
@@ -395,7 +389,6 @@ export default function App() {
         throw new Error("Could not determine location");
       }
     } catch (err) {
-      console.error("Error getting location:", err);
       setError(err.message || "Failed to get location");
     } finally {
       setLoading(false);
