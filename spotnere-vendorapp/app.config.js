@@ -10,7 +10,7 @@ export default {
     name: "Spotnere Vendor",
     owner: "shaikabdulkhadar571",
     slug: "spotnere-vendor",
-    version: "1.0.2",
+    version: "1.0.3",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
