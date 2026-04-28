@@ -3,9 +3,9 @@
  * Provides a simple in-app toast/banner for notifications
  */
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from "react";
 import { StyleSheet, Text, Animated } from "react-native";
-import { colors } from "../constants/colors";
+import { useTheme } from "./ThemeContext";
 import { fonts } from "../constants/fonts";
 
 const ToastContext = createContext();
@@ -13,6 +13,8 @@ const ToastContext = createContext();
 const TOAST_DURATION = 3500;
 
 export const ToastProvider = ({ children }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [message, setMessage] = useState(null);
   const [opacity] = useState(() => new Animated.Value(0));
 
@@ -63,7 +65,7 @@ export const useToast = () => {
   return context;
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   toast: {
     position: "absolute",
     top: 60,
@@ -73,7 +75,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 10,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,

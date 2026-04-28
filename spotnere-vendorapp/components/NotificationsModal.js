@@ -3,7 +3,7 @@
  * Displays the latest 2 notifications in a floating popup modal with tail
  */
 
-import React from "react";
+import React, { useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -14,7 +14,7 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../contexts/ThemeContext";
 import { fonts } from "../constants/fonts";
 
 const { width: screenWidth } = Dimensions.get("window");
@@ -26,6 +26,9 @@ const NotificationsModal = ({
   notifications = [],
   onShowAll,
 }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const latestNotifications = notifications.slice(0, 2);
 
   const getNotificationIcon = (type) => {
@@ -224,7 +227,7 @@ const NotificationsModal = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.3)",

@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { StyleSheet, View, ActivityIndicator, BackHandler, Platform } from "react-native";
+import {
+  StyleSheet,
+  View,
+  ActivityIndicator,
+  BackHandler,
+  Platform,
+} from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import LoginScreen from "./screens/LoginScreen";
@@ -13,10 +19,10 @@ import PlacePreferencesOnboarding from "./components/PlacePreferencesOnboarding"
 import BankDetailsOnboarding from "./components/BankDetailsOnboarding";
 import ReviewsScreen from "./screens/ReviewsScreen";
 import NotificationsScreen from "./screens/NotificationsScreen";
-import { colors } from "./constants/colors";
 import { isLoggedIn } from "./utils/auth";
 import { AppProvider, useApp } from "./contexts/AppContext";
 import { ToastProvider } from "./contexts/ToastContext";
+import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import {
   registerAndStorePushToken,
   clearPushToken,
@@ -38,7 +44,9 @@ async function isPreferencesOnboardingDone(vendorId, apiSaysComplete) {
 }
 
 function AppContent() {
-  const { user, refreshData, clearCache, markAllNotificationsAsRead } = useApp();
+  const { colors, isDark } = useTheme();
+  const { user, refreshData, clearCache, markAllNotificationsAsRead } =
+    useApp();
 
   const [fontsLoaded] = useFonts({
     "Parkinsans-Light": require("./assets/fonts/Parkinsans-Light.ttf"),
@@ -52,7 +60,8 @@ function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showPlaceOnboarding, setShowPlaceOnboarding] = useState(false);
-  const [showPreferencesOnboarding, setShowPreferencesOnboarding] = useState(false);
+  const [showPreferencesOnboarding, setShowPreferencesOnboarding] =
+    useState(false);
   const [showBankOnboarding, setShowBankOnboarding] = useState(false);
   const [checkingOnboarding, setCheckingOnboarding] = useState(false);
   const [activeTab, setActiveTab] = useState("home");
@@ -94,17 +103,29 @@ function AppContent() {
 
     const backHandler = BackHandler.addEventListener(
       "hardwareBackPress",
-      backAction
+      backAction,
     );
 
     return () => {
       backHandler.remove();
     };
-  }, [activeTab, showReviewsScreen, showNotificationsScreen, handleBackFromNotifications]);
+  }, [
+    activeTab,
+    showReviewsScreen,
+    showNotificationsScreen,
+    handleBackFromNotifications,
+  ]);
 
   useEffect(() => {
     // Check onboarding status when user becomes available
-    if (isAuthenticated && user?.id && !checkingOnboarding && !showPlaceOnboarding && !showPreferencesOnboarding && !showBankOnboarding) {
+    if (
+      isAuthenticated &&
+      user?.id &&
+      !checkingOnboarding &&
+      !showPlaceOnboarding &&
+      !showPreferencesOnboarding &&
+      !showBankOnboarding
+    ) {
       checkOnboardingStatus();
     }
   }, [isAuthenticated, user?.id]);
@@ -113,7 +134,7 @@ function AppContent() {
   useEffect(() => {
     if (isAuthenticated && user?.id) {
       registerAndStorePushToken(user.id).catch((err) =>
-        console.warn("Push registration failed:", err)
+        console.warn("Push registration failed:", err),
       );
     }
   }, [isAuthenticated, user?.id]);
@@ -188,7 +209,8 @@ function AppContent() {
     const currentUser = await getCurrentUser();
     if (currentUser?.id) {
       try {
-        const { bankDetailsComplete, preferencesComplete } = await api.getOnboardingStatus();
+        const { bankDetailsComplete, preferencesComplete } =
+          await api.getOnboardingStatus();
         const prefsDone = await isPreferencesOnboardingDone(
           currentUser.id,
           preferencesComplete,
@@ -226,7 +248,8 @@ function AppContent() {
     const currentUser = await getCurrentUser();
     if (currentUser?.id) {
       try {
-        const { placeDetailsComplete, preferencesComplete } = await api.getOnboardingStatus();
+        const { placeDetailsComplete, preferencesComplete } =
+          await api.getOnboardingStatus();
         const prefsDone = await isPreferencesOnboardingDone(
           currentUser.id,
           preferencesComplete,
@@ -325,9 +348,9 @@ function AppContent() {
   if (!fontsLoaded || isLoading || checkingOnboarding) {
     return (
       <>
-        <StatusBar style="auto" />
-        <View style={styles.outerContainer}>
-          <View style={styles.container}>
+        <StatusBar style={isDark ? "light" : "dark"} />
+        <View style={[styles.outerContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.container, { backgroundColor: colors.background }]}>
             <View style={[styles.screenWrapper, styles.loadingContainer]}>
               <ActivityIndicator size="large" color={colors.primary} />
             </View>
@@ -339,9 +362,9 @@ function AppContent() {
 
   return (
     <>
-      <StatusBar style="auto" />
-      <View style={styles.outerContainer}>
-        <View style={styles.container}>
+      <StatusBar style={isDark ? "light" : "dark"} />
+      <View style={[styles.outerContainer, { backgroundColor: colors.background }]}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
           <View style={styles.screenWrapper}>
             {isAuthenticated ? (
               showPlaceOnboarding ? (
@@ -350,9 +373,13 @@ function AppContent() {
                   onComplete={handlePlaceOnboardingComplete}
                 />
               ) : showPreferencesOnboarding ? (
-                <PlacePreferencesOnboarding onComplete={handlePreferencesOnboardingComplete} />
+                <PlacePreferencesOnboarding
+                  onComplete={handlePreferencesOnboardingComplete}
+                />
               ) : showBankOnboarding ? (
-                <BankDetailsOnboarding onComplete={handleBankOnboardingComplete} />
+                <BankDetailsOnboarding
+                  onComplete={handleBankOnboardingComplete}
+                />
               ) : (
                 <>
                   {renderScreen()}
@@ -377,25 +404,25 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ToastProvider>
-      <AppProvider>
-        <AppContent />
-      </AppProvider>
-    </ToastProvider>
+    <ThemeProvider>
+      <ToastProvider>
+        <AppProvider>
+          <AppContent />
+        </AppProvider>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }
 
 const styles = StyleSheet.create({
   outerContainer: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   container: {
     flex: 1,
     margin: 10,
     paddingTop: 60,
     paddingBottom: 10,
-    backgroundColor: colors.background,
     borderRadius: 8,
     overflow: "hidden",
   },

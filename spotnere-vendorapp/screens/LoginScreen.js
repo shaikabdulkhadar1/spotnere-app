@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -12,7 +12,7 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../contexts/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { loginUser } from "../utils/auth";
 import RegistrationPage from "../components/RegistrationPage";
@@ -21,6 +21,9 @@ import { rules, collectErrors } from "../utils/validate";
 const { width, height } = Dimensions.get("window");
 
 const LoginScreen = ({ onLoginSuccess, onBack }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [mode, setMode] = useState("signIn"); // "signIn" or "signUp"
 
   const [formData, setFormData] = useState({
@@ -248,7 +251,7 @@ const LoginScreen = ({ onLoginSuccess, onBack }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

@@ -6,7 +6,7 @@
  * - Keeps your existing data flow (useApp)
  */
 
-import React from "react";
+import React, { useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -22,7 +22,7 @@ import {
 import { LineChart, PieChart } from "react-native-chart-kit";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors } from "../constants/colors";
+import { useTheme } from "../contexts/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { useApp } from "../contexts/AppContext";
 import NotificationsModal from "../components/NotificationsModal";
@@ -37,7 +37,7 @@ const currencyCompact = (n) => {
   return `₹${Math.round(num)}`;
 };
 
-const getTrendMeta = (pct) => {
+const getTrendMeta = (pct, colors) => {
   const p = Number(pct || 0);
   if (p === 0) return { icon: "remove", color: colors.textSecondary };
   if (p > 0) return { icon: "trending-up", color: colors.success };
@@ -49,6 +49,9 @@ const HomeScreen = ({
   onNavigateToReviews,
   onNavigateToNotifications,
 }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const {
     user,
     bookingsData,
@@ -180,7 +183,7 @@ const HomeScreen = ({
           ? "Last 4 weeks"
           : "Last 12 months";
 
-  const trendMeta = getTrendMeta(revenueData?.trendPercentage);
+  const trendMeta = getTrendMeta(revenueData?.trendPercentage, colors);
 
   // Chart config: NO X axis, NO Y axis labels
   const chartConfig = {
@@ -543,7 +546,7 @@ const HomeScreen = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
   content: {
@@ -638,7 +641,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: 14,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.06,
     shadowRadius: 16,
@@ -720,7 +723,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.2,
     shadowRadius: 12,
@@ -778,7 +781,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: 14,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.06,
     shadowRadius: 16,

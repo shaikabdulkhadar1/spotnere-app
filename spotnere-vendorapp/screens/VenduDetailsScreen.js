@@ -3,7 +3,7 @@
  * Displays place details with banner image, place information, and gallery
  */
 
-import React from "react";
+import React, { useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -21,7 +21,7 @@ import {
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { colors } from "../constants/colors";
+import { useTheme } from "../contexts/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { api } from "../api/client";
 import { Country, State, City } from "country-state-city";
@@ -59,6 +59,8 @@ const generateTimeOptions = () => {
 const TIME_OPTIONS = generateTimeOptions();
 
 const VenduDetailsScreen = () => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, placeData, loadPlace, loadBannerImage, bannerCacheBuster } =
     useApp();
   const [loading, setLoading] = React.useState(false);
@@ -522,8 +524,14 @@ const VenduDetailsScreen = () => {
       name: rules.medStrOptional(editFormData.name, "Place name"),
       description: rules.longStr(editFormData.description, "Description"),
       website: rules.urlOptional(editFormData.website, "Website"),
-      location_map_link: rules.urlOptional(editFormData.location_map_link, "Map link"),
-      phone_number: rules.phoneOptional(editFormData.phone_number, "Phone number"),
+      location_map_link: rules.urlOptional(
+        editFormData.location_map_link,
+        "Map link",
+      ),
+      phone_number: rules.phoneOptional(
+        editFormData.phone_number,
+        "Phone number",
+      ),
       address: rules.medStrOptional(editFormData.address, "Address"),
       city: rules.shortStrOptional(editFormData.city, "City"),
       state: rules.shortStrOptional(editFormData.state, "State"),
@@ -707,7 +715,11 @@ const VenduDetailsScreen = () => {
 
     return (
       <View style={styles.detailRow}>
-        <Ionicons name={icon} size={20} color={fieldError ? "#DC3545" : colors.primary} />
+        <Ionicons
+          name={icon}
+          size={20}
+          color={fieldError ? "#DC3545" : colors.primary}
+        />
         <View style={styles.detailContent}>
           <Text style={styles.detailLabel}>{label}</Text>
           {isEditing ? (
@@ -1414,20 +1426,31 @@ const VenduDetailsScreen = () => {
             <>
               {/* Basic Information */}
               <View style={styles.detailRow}>
-                <Ionicons name="business" size={20} color={editErrors.name ? "#DC3545" : colors.primary} />
+                <Ionicons
+                  name="business"
+                  size={20}
+                  color={editErrors.name ? "#DC3545" : colors.primary}
+                />
                 <View style={styles.detailContent}>
                   <Text style={styles.detailLabel}>Name</Text>
                   {isEditing ? (
                     <>
                       <TextInput
-                        style={[styles.detailInput, editErrors.name && styles.detailInputError]}
+                        style={[
+                          styles.detailInput,
+                          editErrors.name && styles.detailInputError,
+                        ]}
                         value={editFormData.name}
-                        onChangeText={(value) => handleFieldChange("name", value)}
+                        onChangeText={(value) =>
+                          handleFieldChange("name", value)
+                        }
                         placeholder="Enter name"
                         placeholderTextColor={colors.textSecondary}
                       />
                       {editErrors.name ? (
-                        <Text style={styles.fieldErrorText}>{editErrors.name}</Text>
+                        <Text style={styles.fieldErrorText}>
+                          {editErrors.name}
+                        </Text>
                       ) : null}
                     </>
                   ) : (
@@ -1743,744 +1766,747 @@ const VenduDetailsScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    paddingBottom: 100,
-  },
-  header: {
-    paddingHorizontal: 10,
-    paddingTop: 20,
-    paddingBottom: 10,
-    marginBottom: 0,
-  },
-  title: {
-    fontSize: 28,
-    fontFamily: fonts.bold,
-    color: colors.text,
-    marginBottom: 4,
-  },
-  description: {
-    fontSize: 14,
-    fontFamily: fonts.regular,
-    color: colors.textSecondary,
-    marginTop: 4,
-  },
-  section: {
-    marginBottom: 32,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontFamily: fonts.bold,
-    color: colors.text,
-    flex: 1,
-  },
-  editButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: colors.primary,
-  },
-  editActions: {
-    flexDirection: "row",
-  },
-  actionButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    minWidth: 60,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 8,
-  },
-  actionButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    minWidth: 60,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cancelButton: {
-    backgroundColor: colors.surface,
-  },
-  cancelButtonText: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: colors.textSecondary,
-  },
-  saveButton: {
-    backgroundColor: colors.primary,
-  },
-  saveButtonText: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: "#FFFFFF",
-  },
-  saveButtonDisabled: {
-    backgroundColor: colors.border,
-  },
-  saveButtonTextDisabled: {
-    color: colors.textSecondary,
-  },
-  // Banner Image Section
-  bannerContainer: {
-    height: 200,
-    backgroundColor: colors.surface,
-    marginHorizontal: 10,
-    borderRadius: 12,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  bannerImage: {
-    width: "100%",
-    height: "100%",
-  },
-  bannerOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 8,
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  bannerOverlayText: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: "#FFFFFF",
-  },
-  bannerPlaceholder: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-  },
-  bannerPlaceholderText: {
-    fontSize: 14,
-    fontFamily: fonts.regular,
-    color: colors.textSecondary,
-    marginTop: 8,
-  },
-  addImageButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: colors.cardBackground,
-    borderRadius: 8,
-  },
-  addImageText: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: colors.primary,
-    marginLeft: 6,
-  },
-  // Banner Preview Modal
-  bannerModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  bannerModalContent: {
-    backgroundColor: colors.cardBackground,
-    borderRadius: 16,
-    padding: 20,
-    width: "100%",
-    maxWidth: 360,
-  },
-  bannerModalTitle: {
-    fontSize: 18,
-    fontFamily: fonts.semiBold,
-    color: colors.text,
-    marginBottom: 16,
-    textAlign: "center",
-  },
-  bannerModalPreview: {
-    width: "100%",
-    height: 160,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-    marginBottom: 20,
-  },
-  bannerModalActions: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  bannerModalCancelButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: colors.surface,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  bannerModalCancelText: {
-    fontSize: 15,
-    fontFamily: fonts.semiBold,
-    color: colors.textSecondary,
-  },
-  bannerModalUploadButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-  },
-  bannerModalUploadText: {
-    fontSize: 15,
-    fontFamily: fonts.semiBold,
-    color: "#FFFFFF",
-  },
-  galleryModalContent: {
-    backgroundColor: colors.cardBackground,
-    borderRadius: 16,
-    padding: 20,
-    width: "100%",
-    maxWidth: 360,
-  },
-  galleryPreviewList: {
-    paddingVertical: 12,
-    marginBottom: 16,
-  },
-  galleryPreviewItemWrapper: {
-    marginRight: 12,
-  },
-  galleryPreviewItem: {
-    width: 100,
-    height: 100,
-    borderRadius: 8,
-    backgroundColor: colors.surface,
-  },
-  // Place Details Section
-  detailsCard: {
-    marginHorizontal: 10,
-    backgroundColor: colors.cardBackground,
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 14,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 2,
-  },
-  detailRow: {
-    flexDirection: "row",
-    marginBottom: 20,
-    alignItems: "flex-start",
-  },
-  detailContent: {
-    flex: 1,
-    marginLeft: 12,
-    paddingRight: 4,
-  },
-  detailLabel: {
-    fontSize: 12,
-    fontFamily: fonts.regular,
-    color: colors.textSecondary,
-    marginBottom: 4,
-  },
-  detailValue: {
-    fontSize: 16,
-    fontFamily: fonts.semiBold,
-    color: colors.text,
-  },
-  detailValueDisabled: {
-    color: colors.textSecondary,
-  },
-  detailInput: {
-    fontSize: 16,
-    fontFamily: fonts.regular,
-    color: colors.text,
-    backgroundColor: colors.surface,
-    borderRadius: 8,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    minHeight: 40,
-  },
-  detailInputMultiline: {
-    minHeight: 80,
-    textAlignVertical: "top",
-  },
-  detailInputError: {
-    borderColor: "#DC3545",
-    borderWidth: 1.5,
-  },
-  fieldErrorText: {
-    color: "#DC3545",
-    fontSize: 12,
-    fontFamily: fonts.regular,
-    marginTop: 4,
-  },
-  detailDropdown: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: colors.surface,
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    minHeight: 40,
-  },
-  detailDropdownText: {
-    flex: 1,
-    fontSize: 16,
-    fontFamily: fonts.regular,
-    color: colors.text,
-    marginRight: 8,
-  },
-  detailDropdownPlaceholder: {
-    color: colors.textSecondary,
-  },
-  detailValuePlaceholder: {
-    color: colors.textSecondary,
-  },
-  hoursTable: {
-    marginTop: 8,
-  },
-  hoursRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border + "30",
-  },
-  hoursDay: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: colors.text,
-    minWidth: 50,
-  },
-  hoursTime: {
-    fontSize: 14,
-    fontFamily: fonts.regular,
-    color: colors.text,
-    flex: 1,
-    textAlign: "right",
-  },
-  hoursTimeClosed: {
-    color: colors.error,
-    fontFamily: fonts.semiBold,
-  },
-  editHoursTable: {
-    backgroundColor: colors.cardBackground,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-    marginTop: 8,
-  },
-  editHoursHeader: {
-    flexDirection: "row",
-    backgroundColor: colors.primary + "15",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  editHoursHeaderText: {
-    flex: 1,
-    fontSize: 12,
-    fontFamily: fonts.semiBold,
-    color: colors.primary,
-    textAlign: "center",
-  },
-  editHoursRow: {
-    flexDirection: "row",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border + "50",
-    alignItems: "center",
-  },
-  editHoursDayCol: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  editHoursDayText: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: colors.text,
-  },
-  editHoursTimeCol: {
-    flex: 1.5,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginHorizontal: 4,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  editHoursTimeColClosed: {
-    backgroundColor: colors.error + "15",
-    borderColor: colors.error + "50",
-  },
-  editHoursTimeText: {
-    fontSize: 13,
-    fontFamily: fonts.regular,
-    color: colors.text,
-  },
-  editHoursTimePlaceholder: {
-    color: colors.textSecondary,
-  },
-  editHoursTimeClosedText: {
-    color: colors.error,
-    fontFamily: fonts.semiBold,
-  },
-  timeModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  timeModalContent: {
-    backgroundColor: colors.cardBackground,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "70%",
-    paddingBottom: 20,
-  },
-  timeModalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  timeModalTitle: {
-    fontSize: 18,
-    fontFamily: fonts.bold,
-    color: colors.text,
-  },
-  timeModalCloseButton: {
-    padding: 4,
-  },
-  timeModalList: {
-    maxHeight: 400,
-  },
-  timeModalItem: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border + "30",
-  },
-  timeModalItemText: {
-    fontSize: 16,
-    fontFamily: fonts.regular,
-    color: colors.text,
-  },
-  timeModalItemClosed: {
-    backgroundColor: colors.error + "10",
-    borderBottomColor: colors.error + "30",
-  },
-  timeModalItemTextClosed: {
-    color: colors.error,
-    fontFamily: fonts.semiBold,
-  },
-  prefRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border + "40",
-  },
-  prefRowActive: {
-    borderBottomColor: colors.primary + "20",
-  },
-  prefLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-    marginRight: 12,
-  },
-  prefTextContainer: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  prefTitle: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: colors.text,
-    marginBottom: 2,
-  },
-  prefDescription: {
-    fontSize: 12,
-    fontFamily: fonts.regular,
-    color: colors.textSecondary,
-    lineHeight: 17,
-  },
-  amenitiesContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginTop: 8,
-  },
-  amenityBadge: {
-    backgroundColor: colors.primary + "15",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  amenityBadgeText: {
-    fontSize: 14,
-    fontFamily: fonts.regular,
-    color: colors.primary,
-    marginRight: 4,
-  },
-  editAmenitiesInputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  editAmenitiesInput: {
-    flex: 1,
-    fontSize: 16,
-    fontFamily: fonts.regular,
-    color: colors.text,
-    padding: 4,
-  },
-  editAmenitiesAddBtn: {
-    padding: 4,
-  },
-  editAmenityRemoveBtn: {
-    padding: 2,
-  },
-  detailDropdownDisabled: {
-    opacity: 0.6,
-  },
-  noDataContainer: {
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  noDataText: {
-    fontSize: 14,
-    fontFamily: fonts.regular,
-    color: colors.textSecondary,
-    marginTop: 12,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: colors.cardBackground,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "80%",
-    paddingBottom: 20,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontFamily: fonts.semiBold,
-    color: colors.text,
-  },
-  modalCloseButton: {
-    padding: 4,
-  },
-  modalList: {
-    maxHeight: 400,
-  },
-  modalItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  modalItemSelected: {
-    backgroundColor: colors.surface,
-  },
-  modalItemText: {
-    fontSize: 16,
-    fontFamily: fonts.regular,
-    color: colors.text,
-  },
-  modalItemTextSelected: {
-    fontFamily: fonts.semiBold,
-    color: colors.primary,
-  },
-  modalEmpty: {
-    padding: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalEmptyText: {
-    fontSize: 14,
-    fontFamily: fonts.regular,
-    color: colors.textSecondary,
-    textAlign: "center",
-  },
-  // Gallery Section
-  galleryContainer: {
-    marginHorizontal: 10,
-    backgroundColor: colors.cardBackground,
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 14,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 2,
-  },
-  galleryHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    marginBottom: 10,
-  },
-  galleryHeaderActions: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  addButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.primary,
-    padding: 3,
-    borderRadius: 8,
-  },
-  deleteButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FF0000",
-    padding: 3,
-    borderRadius: 8,
-  },
-  deleteBarButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    backgroundColor: colors.error,
-    borderRadius: 8,
-  },
-  deleteBarButtonText: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: "#FFFFFF",
-  },
-  addButtonText: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: colors.primary,
-    marginLeft: 4,
-  },
-  galleryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    paddingHorizontal: 10,
-  },
-  galleryItem: {
-    width: (width - 115) / 2, // 2 columns: account for container margin(20) + padding(40) + grid padding(20) + gap(6)
-    height: (width - 115) / 2,
-    borderRadius: 8,
-    overflow: "hidden",
-    backgroundColor: colors.surface,
-    marginRight: 6,
-    marginBottom: 6,
-    position: "relative",
-  },
-  galleryCheckbox: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  galleryCheckboxSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  galleryImage: {
-    width: "100%",
-    height: "100%",
-  },
-  galleryPlaceholder: {
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-  },
-  galleryEmpty: {
-    alignItems: "center",
-    paddingVertical: 60,
-    paddingHorizontal: 10,
-  },
-  galleryEmptyText: {
-    fontSize: 14,
-    fontFamily: fonts.regular,
-    color: colors.textSecondary,
-    marginTop: 12,
-    marginBottom: 8,
-  },
-});
+const createStyles = (colors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    content: {
+      paddingBottom: 100,
+    },
+    header: {
+      paddingHorizontal: 10,
+      paddingTop: 20,
+      paddingBottom: 10,
+      marginBottom: 0,
+    },
+    title: {
+      fontSize: 28,
+      fontFamily: fonts.bold,
+      color: colors.text,
+      marginBottom: 4,
+    },
+    description: {
+      fontSize: 14,
+      fontFamily: fonts.regular,
+      color: colors.textSecondary,
+      marginTop: 4,
+    },
+    section: {
+      marginBottom: 32,
+    },
+    sectionHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: 10,
+      marginBottom: 16,
+    },
+    sectionTitle: {
+      fontSize: 20,
+      fontFamily: fonts.bold,
+      color: colors.text,
+      flex: 1,
+    },
+    editButton: {
+      padding: 8,
+      borderRadius: 8,
+      backgroundColor: colors.primary,
+    },
+    editActions: {
+      flexDirection: "row",
+    },
+    actionButton: {
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      minWidth: 60,
+      alignItems: "center",
+      justifyContent: "center",
+      marginLeft: 8,
+    },
+    actionButton: {
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      minWidth: 60,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    cancelButton: {
+      backgroundColor: colors.surface,
+    },
+    cancelButtonText: {
+      fontSize: 14,
+      fontFamily: fonts.semiBold,
+      color: colors.textSecondary,
+    },
+    saveButton: {
+      backgroundColor: colors.primary,
+    },
+    saveButtonText: {
+      fontSize: 14,
+      fontFamily: fonts.semiBold,
+      color: "#FFFFFF",
+    },
+    saveButtonDisabled: {
+      backgroundColor: colors.border,
+    },
+    saveButtonTextDisabled: {
+      color: colors.textSecondary,
+    },
+    // Banner Image Section
+    bannerContainer: {
+      height: 200,
+      backgroundColor: colors.surface,
+      marginHorizontal: 10,
+      borderRadius: 12,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: colors.border,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3,
+      shadowRadius: 6,
+      elevation: 6,
+    },
+    bannerImage: {
+      width: "100%",
+      height: "100%",
+    },
+    bannerOverlay: {
+      position: "absolute",
+      bottom: 0,
+      left: 0,
+      right: 0,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      paddingVertical: 8,
+      backgroundColor: "rgba(0,0,0,0.5)",
+    },
+    bannerOverlayText: {
+      fontSize: 14,
+      fontFamily: fonts.semiBold,
+      color: "#FFFFFF",
+    },
+    bannerPlaceholder: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+    },
+    bannerPlaceholderText: {
+      fontSize: 14,
+      fontFamily: fonts.regular,
+      color: colors.textSecondary,
+      marginTop: 8,
+    },
+    addImageButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 12,
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+      backgroundColor: colors.cardBackground,
+      borderRadius: 8,
+    },
+    addImageText: {
+      fontSize: 14,
+      fontFamily: fonts.semiBold,
+      color: colors.primary,
+      marginLeft: 6,
+    },
+    // Banner Preview Modal
+    bannerModalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.6)",
+      justifyContent: "center",
+      alignItems: "center",
+      padding: 24,
+    },
+    bannerModalContent: {
+      backgroundColor: colors.cardBackground,
+      borderRadius: 16,
+      padding: 20,
+      width: "100%",
+      maxWidth: 360,
+    },
+    bannerModalTitle: {
+      fontSize: 18,
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+      marginBottom: 16,
+      textAlign: "center",
+    },
+    bannerModalPreview: {
+      width: "100%",
+      height: 160,
+      borderRadius: 12,
+      backgroundColor: colors.surface,
+      marginBottom: 20,
+    },
+    bannerModalActions: {
+      flexDirection: "row",
+      gap: 12,
+    },
+    bannerModalCancelButton: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: 10,
+      backgroundColor: colors.surface,
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    bannerModalCancelText: {
+      fontSize: 15,
+      fontFamily: fonts.semiBold,
+      color: colors.textSecondary,
+    },
+    bannerModalUploadButton: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: 10,
+      backgroundColor: colors.primary,
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 44,
+    },
+    bannerModalUploadText: {
+      fontSize: 15,
+      fontFamily: fonts.semiBold,
+      color: "#FFFFFF",
+    },
+    galleryModalContent: {
+      backgroundColor: colors.cardBackground,
+      borderRadius: 16,
+      padding: 20,
+      width: "100%",
+      maxWidth: 360,
+    },
+    galleryPreviewList: {
+      paddingVertical: 12,
+      marginBottom: 16,
+    },
+    galleryPreviewItemWrapper: {
+      marginRight: 12,
+    },
+    galleryPreviewItem: {
+      width: 100,
+      height: 100,
+      borderRadius: 8,
+      backgroundColor: colors.surface,
+    },
+    // Place Details Section
+    detailsCard: {
+      marginHorizontal: 10,
+      backgroundColor: colors.cardBackground,
+      borderRadius: 18,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: 14,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.06,
+      shadowRadius: 16,
+      elevation: 2,
+    },
+    detailRow: {
+      flexDirection: "row",
+      marginBottom: 20,
+      alignItems: "flex-start",
+    },
+    detailContent: {
+      flex: 1,
+      marginLeft: 12,
+      paddingRight: 4,
+    },
+    detailLabel: {
+      fontSize: 12,
+      fontFamily: fonts.regular,
+      color: colors.textSecondary,
+      marginBottom: 4,
+    },
+    detailValue: {
+      fontSize: 16,
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+    },
+    detailValueDisabled: {
+      color: colors.textSecondary,
+    },
+    detailInput: {
+      fontSize: 16,
+      fontFamily: fonts.regular,
+      color: colors.text,
+      backgroundColor: colors.surface,
+      borderRadius: 8,
+      padding: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      minHeight: 40,
+    },
+    detailInputMultiline: {
+      minHeight: 80,
+      textAlignVertical: "top",
+    },
+    detailInputError: {
+      borderColor: "#DC3545",
+      borderWidth: 1.5,
+    },
+    fieldErrorText: {
+      color: "#DC3545",
+      fontSize: 12,
+      fontFamily: fonts.regular,
+      marginTop: 4,
+    },
+    detailDropdown: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      backgroundColor: colors.surface,
+      borderRadius: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      minHeight: 40,
+    },
+    detailDropdownText: {
+      flex: 1,
+      fontSize: 16,
+      fontFamily: fonts.regular,
+      color: colors.text,
+      marginRight: 8,
+    },
+    detailDropdownPlaceholder: {
+      color: colors.textSecondary,
+    },
+    detailValuePlaceholder: {
+      color: colors.textSecondary,
+    },
+    hoursTable: {
+      marginTop: 8,
+    },
+    hoursRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 6,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border + "30",
+    },
+    hoursDay: {
+      fontSize: 14,
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+      minWidth: 50,
+    },
+    hoursTime: {
+      fontSize: 14,
+      fontFamily: fonts.regular,
+      color: colors.text,
+      flex: 1,
+      textAlign: "right",
+    },
+    hoursTimeClosed: {
+      color: colors.error,
+      fontFamily: fonts.semiBold,
+    },
+    editHoursTable: {
+      backgroundColor: colors.cardBackground,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: "hidden",
+      marginTop: 8,
+    },
+    editHoursHeader: {
+      flexDirection: "row",
+      backgroundColor: colors.primary + "15",
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    editHoursHeaderText: {
+      flex: 1,
+      fontSize: 12,
+      fontFamily: fonts.semiBold,
+      color: colors.primary,
+      textAlign: "center",
+    },
+    editHoursRow: {
+      flexDirection: "row",
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border + "50",
+      alignItems: "center",
+    },
+    editHoursDayCol: {
+      flex: 1,
+      justifyContent: "center",
+    },
+    editHoursDayText: {
+      fontSize: 14,
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+    },
+    editHoursTimeCol: {
+      flex: 1.5,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      backgroundColor: colors.background,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      marginHorizontal: 4,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    editHoursTimeColClosed: {
+      backgroundColor: colors.error + "15",
+      borderColor: colors.error + "50",
+    },
+    editHoursTimeText: {
+      fontSize: 13,
+      fontFamily: fonts.regular,
+      color: colors.text,
+    },
+    editHoursTimePlaceholder: {
+      color: colors.textSecondary,
+    },
+    editHoursTimeClosedText: {
+      color: colors.error,
+      fontFamily: fonts.semiBold,
+    },
+    timeModalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: "flex-end",
+    },
+    timeModalContent: {
+      backgroundColor: colors.cardBackground,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      maxHeight: "70%",
+      paddingBottom: 20,
+    },
+    timeModalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    timeModalTitle: {
+      fontSize: 18,
+      fontFamily: fonts.bold,
+      color: colors.text,
+    },
+    timeModalCloseButton: {
+      padding: 4,
+    },
+    timeModalList: {
+      maxHeight: 400,
+    },
+    timeModalItem: {
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border + "30",
+    },
+    timeModalItemText: {
+      fontSize: 16,
+      fontFamily: fonts.regular,
+      color: colors.text,
+    },
+    timeModalItemClosed: {
+      backgroundColor: colors.error + "10",
+      borderBottomColor: colors.error + "30",
+    },
+    timeModalItemTextClosed: {
+      color: colors.error,
+      fontFamily: fonts.semiBold,
+    },
+    prefRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 14,
+      paddingHorizontal: 4,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border + "40",
+    },
+    prefRowActive: {
+      borderBottomColor: colors.primary + "20",
+    },
+    prefLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      flex: 1,
+      marginRight: 12,
+    },
+    prefTextContainer: {
+      flex: 1,
+      marginLeft: 12,
+    },
+    prefTitle: {
+      fontSize: 14,
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+      marginBottom: 2,
+    },
+    prefDescription: {
+      fontSize: 12,
+      fontFamily: fonts.regular,
+      color: colors.textSecondary,
+      lineHeight: 17,
+    },
+    amenitiesContainer: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      marginTop: 8,
+    },
+    amenityBadge: {
+      backgroundColor: colors.primary + "30",
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      marginRight: 8,
+      marginBottom: 8,
+    },
+    amenityBadgeText: {
+      fontSize: 14,
+      fontFamily: fonts.regular,
+      color: colors.primary,
+      marginRight: 4,
+    },
+    editAmenitiesInputRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.surface,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    editAmenitiesInput: {
+      flex: 1,
+      fontSize: 16,
+      fontFamily: fonts.regular,
+      color: colors.text,
+      padding: 4,
+    },
+    editAmenitiesAddBtn: {
+      padding: 4,
+    },
+    editAmenityRemoveBtn: {
+      padding: 2,
+    },
+    detailDropdownDisabled: {
+      opacity: 0.6,
+    },
+    noDataContainer: {
+      alignItems: "center",
+      paddingVertical: 40,
+    },
+    noDataText: {
+      fontSize: 14,
+      fontFamily: fonts.regular,
+      color: colors.textSecondary,
+      marginTop: 12,
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: "flex-end",
+    },
+    modalContent: {
+      backgroundColor: colors.cardBackground,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      maxHeight: "80%",
+      paddingBottom: 20,
+    },
+    modalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      padding: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+    },
+    modalCloseButton: {
+      padding: 4,
+    },
+    modalList: {
+      maxHeight: 400,
+    },
+    modalItem: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    modalItemSelected: {
+      backgroundColor: colors.surface,
+    },
+    modalItemText: {
+      fontSize: 16,
+      fontFamily: fonts.regular,
+      color: colors.text,
+    },
+    modalItemTextSelected: {
+      fontFamily: fonts.semiBold,
+      color: colors.primary,
+    },
+    modalEmpty: {
+      padding: 40,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modalEmptyText: {
+      fontSize: 14,
+      fontFamily: fonts.regular,
+      color: colors.textSecondary,
+      textAlign: "center",
+    },
+    // Gallery Section
+    galleryContainer: {
+      marginHorizontal: 10,
+      backgroundColor: colors.cardBackground,
+      borderRadius: 18,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: 14,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.06,
+      shadowRadius: 16,
+      elevation: 2,
+    },
+    galleryHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: 10,
+      marginBottom: 10,
+    },
+    galleryHeaderActions: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    addButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.primary,
+      padding: 3,
+      borderRadius: 8,
+    },
+    deleteButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: "#FF0000",
+      padding: 3,
+      borderRadius: 8,
+    },
+    deleteBarButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingVertical: 6,
+      paddingHorizontal: 14,
+      backgroundColor: colors.error,
+      borderRadius: 8,
+    },
+    deleteBarButtonText: {
+      fontSize: 14,
+      fontFamily: fonts.semiBold,
+      color: "#FFFFFF",
+    },
+    addButtonText: {
+      fontSize: 14,
+      fontFamily: fonts.semiBold,
+      color: colors.primary,
+      marginLeft: 4,
+    },
+    galleryGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      paddingHorizontal: 10,
+    },
+    galleryItem: {
+      width: (width - 115) / 2, // 2 columns: account for container margin(20) + padding(40) + grid padding(20) + gap(6)
+      height: (width - 115) / 2,
+      borderRadius: 8,
+      overflow: "hidden",
+      backgroundColor: colors.surface,
+      marginRight: 6,
+      marginBottom: 6,
+      position: "relative",
+    },
+    galleryCheckbox: {
+      position: "absolute",
+      top: 8,
+      right: 8,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      borderWidth: 2,
+      borderColor: "#FFFFFF",
+      backgroundColor: "rgba(0,0,0,0.4)",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    galleryCheckboxSelected: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    galleryImage: {
+      width: "100%",
+      height: "100%",
+    },
+    galleryPlaceholder: {
+      width: "100%",
+      height: "100%",
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: colors.surface,
+    },
+    galleryEmpty: {
+      alignItems: "center",
+      paddingVertical: 60,
+      paddingHorizontal: 10,
+    },
+    galleryEmptyText: {
+      fontSize: 14,
+      fontFamily: fonts.regular,
+      color: colors.textSecondary,
+      marginTop: 12,
+      marginBottom: 8,
+    },
+  });
 
 export default VenduDetailsScreen;

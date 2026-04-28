@@ -3,7 +3,7 @@
  * Displays all vendor notifications from vendor_notifications table
  */
 
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -13,11 +13,13 @@ import {
   FlatList,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../contexts/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { useApp } from "../contexts/AppContext";
 
 const NotificationsScreen = ({ onBack }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, notificationsData, loadNotifications } = useApp();
 
   useEffect(() => {
@@ -175,7 +177,7 @@ const NotificationsScreen = ({ onBack }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

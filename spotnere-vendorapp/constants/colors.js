@@ -23,18 +23,18 @@ export const colors = {
 };
 
 export const darkColors = {
-  primary: "#4F6F64",
+  primary: "#709E8E",
   secondary: "#9B7B52",
   accent: "#CFA24A",
-  background: "#0E0F10",
+  background: "#181A1C",
   surface: "#161819",
   topsectionbackground: "#131516",
-  cardBackground: "#1C1F20",
+  cardBackground: "#2D3133",
   badgeBackground: "#232627",
   text: "#E7E9EA",
   textSecondary: "#A0A5A8",
-  border: "#2A2E30",
-  shadow: "rgba(0, 0, 0, 0.8)",
+  border: "#585B5C",
+  shadow: "rgba(0, 0, 0, 0.7)",
   todayRow: "#2B3A36",
   success: "#6E9C86",
   error: "#C0675D",

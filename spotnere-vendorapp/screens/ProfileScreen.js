@@ -3,7 +3,7 @@
  * Displays vendor profile and settings
  */
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -13,9 +13,10 @@ import {
   Alert,
   BackHandler,
   Platform,
+  Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../contexts/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { logout } from "../utils/auth";
 import { useApp } from "../contexts/AppContext";
@@ -27,13 +28,16 @@ import HelpCenterScreen from "../components/HelpCenterScreen";
 import PaymentInfoScreen from "../components/PaymentInfoScreen";
 
 const ProfileScreen = ({ onLogout }) => {
+  const { colors, theme: selectedTheme, setTheme: setSelectedTheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useApp();
-  const [showBookingsList, setShowBookingsList] = React.useState(false);
-  const [showManageProfile, setShowManageProfile] = React.useState(false);
-  const [showPasswordSecurity, setShowPasswordSecurity] = React.useState(false);
-  const [showAboutUs, setShowAboutUs] = React.useState(false);
-  const [showHelpCenter, setShowHelpCenter] = React.useState(false);
-  const [showPaymentInfo, setShowPaymentInfo] = React.useState(false);
+  const [showBookingsList, setShowBookingsList] = useState(false);
+  const [showManageProfile, setShowManageProfile] = useState(false);
+  const [showPasswordSecurity, setShowPasswordSecurity] = useState(false);
+  const [showAboutUs, setShowAboutUs] = useState(false);
+  const [showHelpCenter, setShowHelpCenter] = useState(false);
+  const [showPaymentInfo, setShowPaymentInfo] = useState(false);
+  const [showThemeModal, setShowThemeModal] = useState(false);
 
   const handleLogout = () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
@@ -334,7 +338,7 @@ const ProfileScreen = ({ onLogout }) => {
             />
           </TouchableOpacity>
           <View style={styles.divider} />
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => setShowThemeModal(true)}>
             <Ionicons
               name="color-palette-outline"
               size={20}
@@ -342,7 +346,7 @@ const ProfileScreen = ({ onLogout }) => {
             />
             <View style={styles.menuItemTextContainer}>
               <Text style={styles.menuItemText}>Theme</Text>
-              <Text style={styles.menuItemSubtext}>Light</Text>
+              <Text style={styles.menuItemSubtext}>{selectedTheme}</Text>
             </View>
             <Ionicons
               name="chevron-forward"
@@ -376,11 +380,76 @@ const ProfileScreen = ({ onLogout }) => {
         <Ionicons name="log-out-outline" size={20} color={colors.error} />
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
+
+      <Modal
+        visible={showThemeModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowThemeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Theme</Text>
+              <TouchableOpacity
+                onPress={() => setShowThemeModal(false)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.themeOptions}>
+              {[
+                { key: "Light", icon: "sunny-outline" },
+                { key: "Dark", icon: "moon-outline" },
+                { key: "System Default", icon: "phone-portrait-outline" },
+              ].map((opt) => (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[
+                    styles.themeOption,
+                    selectedTheme === opt.key && styles.themeOptionSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedTheme(opt.key);
+                    setShowThemeModal(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.themeOptionContent}>
+                    <Ionicons
+                      name={opt.icon}
+                      size={24}
+                      color={
+                        selectedTheme === opt.key
+                          ? colors.primary
+                          : colors.textSecondary
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.themeOptionText,
+                        selectedTheme === opt.key && styles.themeOptionTextSelected,
+                      ]}
+                    >
+                      {opt.key}
+                    </Text>
+                  </View>
+                  {selectedTheme === opt.key && (
+                    <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -488,6 +557,65 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semiBold,
     color: colors.error,
     marginLeft: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: colors.cardBackground,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: Platform.OS === "ios" ? 40 : 20,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: colors.text,
+    fontFamily: fonts.bold,
+  },
+  themeOptions: {
+    padding: 20,
+  },
+  themeOption: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  themeOptionSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.cardBackground,
+  },
+  themeOptionContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  themeOptionText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    marginLeft: 12,
+    fontFamily: fonts.regular,
+  },
+  themeOptionTextSelected: {
+    color: colors.text,
+    fontFamily: fonts.semiBold,
   },
 });
 

@@ -3,7 +3,7 @@
  * Displays and allows editing of vendor profile details
  */
 
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -17,7 +17,7 @@ import {
   FlatList,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../contexts/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { useApp } from "../contexts/AppContext";
 import { api } from "../api/client";
@@ -25,6 +25,8 @@ import { Country, State, City } from "country-state-city";
 import { rules, collectErrors } from "../utils/validate";
 
 const ManageProfileScreen = ({ onBack }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, refreshData } = useApp();
   const [isEditing, setIsEditing] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
@@ -695,7 +697,7 @@ const ManageProfileScreen = ({ onBack }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

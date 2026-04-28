@@ -3,7 +3,7 @@
  * Displays vendor bank/payment details
  */
 
-import React from "react";
+import React, { useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -14,12 +14,14 @@ import {
   TextInput,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../contexts/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { useApp } from "../contexts/AppContext";
 import { api } from "../api/client";
 
 const PaymentInfoScreen = ({ onBack }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useApp();
   const [paymentInfo, setPaymentInfo] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -397,7 +399,7 @@ const PaymentInfoScreen = ({ onBack }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

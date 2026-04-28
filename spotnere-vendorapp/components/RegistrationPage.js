@@ -3,7 +3,7 @@
  * Handles vendor registration form
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -19,7 +19,7 @@ import {
   FlatList,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../contexts/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { Country, State, City } from "country-state-city";
 import { registerUser } from "../utils/auth";
@@ -27,7 +27,14 @@ import { rules, collectErrors } from "../utils/validate";
 
 const { width, height } = Dimensions.get("window");
 
-const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) => {
+const RegistrationPage = ({
+  onRegistrationSuccess,
+  onBack,
+  onSwitchToLogin,
+}) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [formData, setFormData] = useState({
     businessName: "",
     businessCategory: "",
@@ -69,7 +76,8 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
   const [showVendorCountryModal, setShowVendorCountryModal] = useState(false);
   const [showVendorStateModal, setShowVendorStateModal] = useState(false);
   const [showVendorCityModal, setShowVendorCityModal] = useState(false);
-  const [selectedVendorCountryCode, setSelectedVendorCountryCode] = useState("");
+  const [selectedVendorCountryCode, setSelectedVendorCountryCode] =
+    useState("");
   const [selectedVendorStateCode, setSelectedVendorStateCode] = useState("");
 
   // Password visibility
@@ -162,7 +170,10 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
     : [];
   const vendorCities =
     selectedVendorCountryCode && selectedVendorStateCode
-      ? City.getCitiesOfState(selectedVendorCountryCode, selectedVendorStateCode)
+      ? City.getCitiesOfState(
+          selectedVendorCountryCode,
+          selectedVendorStateCode,
+        )
       : [];
 
   // Reset state and city when country changes
@@ -269,13 +280,19 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
         checks = {
           email: rules.email(formData.email),
           password: rules.password(formData.password),
-          confirmPassword: rules.confirmPassword(formData.confirmPassword, formData.password),
+          confirmPassword: rules.confirmPassword(
+            formData.confirmPassword,
+            formData.password,
+          ),
         };
         break;
       case 2:
         checks = {
           businessName: rules.medStr(formData.businessName, "Business name"),
-          businessCategory: rules.shortStr(formData.businessCategory, "Business category"),
+          businessCategory: rules.shortStr(
+            formData.businessCategory,
+            "Business category",
+          ),
         };
         break;
       case 3:
@@ -285,13 +302,19 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
           state: rules.shortStr(formData.state, "State"),
           city: rules.shortStr(formData.city, "City"),
           postalCode: rules.postalCode(formData.postalCode),
-          businessPhoneNumber: rules.phone(formData.businessPhoneNumber, "Business phone number"),
+          businessPhoneNumber: rules.phone(
+            formData.businessPhoneNumber,
+            "Business phone number",
+          ),
         };
         break;
       case 4:
         checks = {
           vendorFullName: rules.medStr(formData.vendorFullName, "Full name"),
-          vendorPhoneNumber: rules.phone(formData.vendorPhoneNumber, "Phone number"),
+          vendorPhoneNumber: rules.phone(
+            formData.vendorPhoneNumber,
+            "Phone number",
+          ),
           vendorAddress: rules.medStr(formData.vendorAddress, "Address"),
           vendorCountry: rules.shortStr(formData.vendorCountry, "Country"),
           vendorState: rules.shortStr(formData.vendorState, "State"),
@@ -310,17 +333,29 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
     const newErrors = collectErrors({
       email: rules.email(formData.email),
       password: rules.password(formData.password),
-      confirmPassword: rules.confirmPassword(formData.confirmPassword, formData.password),
+      confirmPassword: rules.confirmPassword(
+        formData.confirmPassword,
+        formData.password,
+      ),
       businessName: rules.medStr(formData.businessName, "Business name"),
-      businessCategory: rules.shortStr(formData.businessCategory, "Business category"),
+      businessCategory: rules.shortStr(
+        formData.businessCategory,
+        "Business category",
+      ),
       address: rules.medStr(formData.address, "Address"),
       country: rules.shortStr(formData.country, "Country"),
       state: rules.shortStr(formData.state, "State"),
       city: rules.shortStr(formData.city, "City"),
       postalCode: rules.postalCode(formData.postalCode),
-      businessPhoneNumber: rules.phone(formData.businessPhoneNumber, "Business phone number"),
+      businessPhoneNumber: rules.phone(
+        formData.businessPhoneNumber,
+        "Business phone number",
+      ),
       vendorFullName: rules.medStr(formData.vendorFullName, "Full name"),
-      vendorPhoneNumber: rules.phone(formData.vendorPhoneNumber, "Phone number"),
+      vendorPhoneNumber: rules.phone(
+        formData.vendorPhoneNumber,
+        "Phone number",
+      ),
       vendorAddress: rules.medStr(formData.vendorAddress, "Address"),
       vendorCountry: rules.shortStr(formData.vendorCountry, "Country"),
       vendorState: rules.shortStr(formData.vendorState, "State"),
@@ -340,7 +375,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
     } else {
       Alert.alert(
         "Validation Error",
-        "Please fill in all required fields correctly."
+        "Please fill in all required fields correctly.",
       );
     }
   };
@@ -355,7 +390,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
     if (!validateForm()) {
       Alert.alert(
         "Validation Error",
-        "Please fill in all required fields correctly."
+        "Please fill in all required fields correctly.",
       );
       return;
     }
@@ -368,7 +403,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
       if (!result.success) {
         Alert.alert(
           "Registration Failed",
-          result.error || "Failed to create account. Please try again."
+          result.error || "Failed to create account. Please try again.",
         );
         return;
       }
@@ -380,13 +415,13 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
         Alert.alert(
           "Success",
           "Account created successfully! Your account is pending approval.",
-          [{ text: "OK" }]
+          [{ text: "OK" }],
         );
       }
     } catch (error) {
       Alert.alert(
         "Error",
-        error.message || "Something went wrong. Please try again."
+        error.message || "Something went wrong. Please try again.",
       );
     } finally {
       setIsSubmitting(false);
@@ -401,7 +436,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
     autoCapitalize = "words",
     icon = null,
     isPassword = false,
-    showPasswordToggle = false
+    showPasswordToggle = false,
   ) => {
     const hasError = errors[field];
     const value = formData[field];
@@ -479,13 +514,13 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
     getValue,
     getDisplayValue,
     disabled = false,
-    onSelect = null
+    onSelect = null,
   ) => {
     const hasError = errors[field];
     const selectedValue = formData[field];
     const safeOptions = Array.isArray(options) ? options : [];
     const selectedOption = safeOptions.find(
-      (item) => getValue(item) === selectedValue
+      (item) => getValue(item) === selectedValue,
     );
     const displayText = selectedOption
       ? getDisplayValue(selectedOption)
@@ -657,7 +692,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               "Enter your email address",
               "email-address",
               "none",
-              "mail-outline"
+              "mail-outline",
             )}
 
             {renderInputField(
@@ -668,7 +703,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               "none",
               "lock-closed-outline",
               true,
-              true
+              true,
             )}
 
             {renderInputField(
@@ -679,7 +714,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               "none",
               "lock-closed-outline",
               true,
-              true
+              true,
             )}
           </View>
         )}
@@ -694,7 +729,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               "Enter your business name",
               "default",
               "words",
-              "business-outline"
+              "business-outline",
             )}
 
             {renderDropdownField(
@@ -706,7 +741,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               showCategoryModal,
               setShowCategoryModal,
               (item) => item.value,
-              (item) => item.label
+              (item) => item.label,
             )}
 
             {renderDropdownField(
@@ -721,7 +756,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               setShowSubCategoryModal,
               (item) => item.value,
               (item) => item.label,
-              !formData.businessCategory
+              !formData.businessCategory,
             )}
           </View>
         )}
@@ -739,7 +774,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               "Enter your address",
               "default",
               "words",
-              "home-outline"
+              "home-outline",
             )}
 
             {renderDropdownField(
@@ -753,7 +788,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               (item) => item.name,
               (item) => item.name,
               false,
-              handleCountrySelect
+              handleCountrySelect,
             )}
 
             {renderDropdownField(
@@ -767,7 +802,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               (item) => item.name,
               (item) => item.name,
               !formData.country,
-              handleStateSelect
+              handleStateSelect,
             )}
 
             {renderDropdownField(
@@ -781,7 +816,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               (item) => item.name,
               (item) => item.name,
               !formData.state,
-              handleCitySelect
+              handleCitySelect,
             )}
 
             {renderInputField(
@@ -790,7 +825,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               "Enter your postal code",
               "default",
               "characters",
-              "mail-outline"
+              "mail-outline",
             )}
 
             {renderInputField(
@@ -799,7 +834,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               "Enter your business phone number",
               "phone-pad",
               "none",
-              "call-outline"
+              "call-outline",
             )}
           </View>
         )}
@@ -817,7 +852,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               "Enter your full name",
               "default",
               "words",
-              "person-outline"
+              "person-outline",
             )}
 
             {renderInputField(
@@ -826,7 +861,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               "Enter your vendor phone number",
               "phone-pad",
               "none",
-              "call-outline"
+              "call-outline",
             )}
 
             {/* Vendor Address Section */}
@@ -837,7 +872,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               "Enter your address",
               "default",
               "words",
-              "home-outline"
+              "home-outline",
             )}
 
             {renderDropdownField(
@@ -851,13 +886,15 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               (item) => item.name,
               (item) => item.name,
               false,
-              handleVendorCountrySelect
+              handleVendorCountrySelect,
             )}
 
             {renderDropdownField(
               "vendorState",
               "State",
-              formData.vendorCountry ? "Select your state" : "Select country first",
+              formData.vendorCountry
+                ? "Select your state"
+                : "Select country first",
               "map-outline",
               vendorStates,
               showVendorStateModal,
@@ -865,7 +902,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               (item) => item.name,
               (item) => item.name,
               !formData.vendorCountry,
-              handleVendorStateSelect
+              handleVendorStateSelect,
             )}
 
             {renderDropdownField(
@@ -879,7 +916,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               (item) => item.name,
               (item) => item.name,
               !formData.vendorState,
-              handleVendorCitySelect
+              handleVendorCitySelect,
             )}
 
             {renderInputField(
@@ -888,7 +925,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
               "Enter your postal code",
               "default",
               "characters",
-              "mail-outline"
+              "mail-outline",
             )}
           </View>
         )}
@@ -954,7 +991,7 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

@@ -4,7 +4,7 @@
  * Shown after PlaceDetailsOnboarding for new users
  */
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -18,13 +18,15 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../contexts/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { api } from "../api/client";
 import { useApp } from "../contexts/AppContext";
 import { rules, collectErrors } from "../utils/validate";
 
 const BankDetailsOnboarding = ({ onComplete }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, refreshData } = useApp();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -227,7 +229,7 @@ const BankDetailsOnboarding = ({ onComplete }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

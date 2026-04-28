@@ -3,7 +3,7 @@
  * Displays information about Spotnere and the app
  */
 
-import React from "react";
+import React, { useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -13,10 +13,13 @@ import {
   Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../contexts/ThemeContext";
 import { fonts } from "../constants/fonts";
 
 const AboutUsScreen = ({ onBack }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const handleEmailPress = () => {
     Linking.openURL("mailto:support@spotnere.com").catch((err) =>
       console.error("Error opening email:", err)
@@ -192,7 +195,7 @@ const AboutUsScreen = ({ onBack }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

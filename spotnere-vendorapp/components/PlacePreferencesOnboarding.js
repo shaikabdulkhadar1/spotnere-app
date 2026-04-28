@@ -3,7 +3,7 @@
  * Collects vendor booking/pricing preferences after place details
  */
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -17,7 +17,7 @@ import {
   Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../contexts/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { api } from "../api/client";
 import { useApp } from "../contexts/AppContext";
@@ -47,6 +47,8 @@ const PREFERENCE_OPTIONS = [
 ];
 
 const PlacePreferencesOnboarding = ({ onComplete }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, loadPlace } = useApp();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [preferences, setPreferences] = useState({
@@ -186,7 +188,7 @@ const PlacePreferencesOnboarding = ({ onComplete }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

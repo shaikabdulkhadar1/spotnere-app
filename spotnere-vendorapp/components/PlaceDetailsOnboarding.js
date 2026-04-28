@@ -4,7 +4,7 @@
  * Only shown once for new users after account creation
  */
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -20,7 +20,7 @@ import {
   FlatList,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../contexts/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { api } from "../api/client";
 import { useApp } from "../contexts/AppContext";
@@ -61,6 +61,8 @@ const generateTimeOptions = () => {
 const TIME_OPTIONS = generateTimeOptions();
 
 const PlaceDetailsOnboarding = ({ onComplete, onNext }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, loadPlace } = useApp();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -609,7 +611,7 @@ const PlaceDetailsOnboarding = ({ onComplete, onNext }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
