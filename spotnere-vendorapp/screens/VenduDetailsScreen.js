@@ -26,6 +26,7 @@ import { fonts } from "../constants/fonts";
 import { api } from "../api/client";
 import { Country, State, City } from "country-state-city";
 import { useApp } from "../contexts/AppContext";
+import { rules, collectErrors } from "../utils/validate";
 
 const { width } = Dimensions.get("window");
 
@@ -123,7 +124,7 @@ const VenduDetailsScreen = () => {
     const placeId = user?.place_id || placeData?.id;
     if (!placeId) return;
     try {
-      const data = await api.getVendorGallery(placeId);
+      const data = await api.getVendorGallery();
       setGalleryImages(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Error loading gallery:", err);
@@ -348,7 +349,7 @@ const VenduDetailsScreen = () => {
           }
         }
       }
-      await api.uploadBanner(placeId, bannerPreviewBase64);
+      await api.uploadBanner(bannerPreviewBase64);
       await loadPlace(true);
       setShowBannerPreviewModal(false);
       setBannerPreviewUri(null);
@@ -398,7 +399,7 @@ const VenduDetailsScreen = () => {
         .map((item) => item.base64)
         .filter(Boolean);
       if (images.length === 0) return;
-      await api.uploadGallery(placeId, images);
+      await api.uploadGallery(images);
       await loadGalleryImages();
       setShowGalleryPreviewModal(false);
       setGalleryPreviewItems([]);
@@ -475,6 +476,7 @@ const VenduDetailsScreen = () => {
   };
 
   const handleEdit = () => {
+    setEditErrors({});
     setIsEditing(true);
   };
 
@@ -513,9 +515,39 @@ const VenduDetailsScreen = () => {
     setIsEditing(false);
   };
 
+  const [editErrors, setEditErrors] = React.useState({});
+
+  const validatePlaceEdit = () => {
+    const errs = collectErrors({
+      name: rules.medStrOptional(editFormData.name, "Place name"),
+      description: rules.longStr(editFormData.description, "Description"),
+      website: rules.urlOptional(editFormData.website, "Website"),
+      location_map_link: rules.urlOptional(editFormData.location_map_link, "Map link"),
+      phone_number: rules.phoneOptional(editFormData.phone_number, "Phone number"),
+      address: rules.medStrOptional(editFormData.address, "Address"),
+      city: rules.shortStrOptional(editFormData.city, "City"),
+      state: rules.shortStrOptional(editFormData.state, "State"),
+      country: rules.shortStrOptional(editFormData.country, "Country"),
+      postal_code: editFormData.postal_code
+        ? rules.postalCode(editFormData.postal_code)
+        : null,
+    });
+    if (editFormData.avg_price && editFormData.avg_price.toString().trim()) {
+      const priceErr = rules.price(editFormData.avg_price, "Average price");
+      if (priceErr) errs.avg_price = priceErr;
+    }
+    setEditErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
   const handleSave = async () => {
     const placeId = user?.place_id || placeData?.id;
     if (!placeId) return;
+
+    if (!validatePlaceEdit()) {
+      Alert.alert("Validation Error", "Please correct the highlighted errors.");
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -561,7 +593,7 @@ const VenduDetailsScreen = () => {
         amenities: editAmenities.length > 0 ? editAmenities : null,
       };
 
-      await api.updateVendorPlace(placeId, updateData);
+      await api.updateVendorPlace(updateData);
 
       setIsEditing(false);
       Alert.alert("Success", "Place details updated successfully!");
@@ -577,6 +609,9 @@ const VenduDetailsScreen = () => {
 
   const handleFieldChange = (field, value) => {
     setEditFormData((prev) => ({ ...prev, [field]: value }));
+    if (editErrors[field]) {
+      setEditErrors((prev) => ({ ...prev, [field]: null }));
+    }
   };
 
   const handleDropdownSelect = (field, value, code = "") => {
@@ -668,26 +703,34 @@ const VenduDetailsScreen = () => {
       return value;
     };
 
+    const fieldError = isEditing && editable ? editErrors[field] : null;
+
     return (
       <View style={styles.detailRow}>
-        <Ionicons name={icon} size={20} color={colors.primary} />
+        <Ionicons name={icon} size={20} color={fieldError ? "#DC3545" : colors.primary} />
         <View style={styles.detailContent}>
           <Text style={styles.detailLabel}>{label}</Text>
           {isEditing ? (
             editable ? (
-              <TextInput
-                style={[
-                  styles.detailInput,
-                  multiline && styles.detailInputMultiline,
-                ]}
-                value={editFormData[field] || ""}
-                onChangeText={(value) => handleFieldChange(field, value)}
-                placeholder={`Enter ${label.toLowerCase()}`}
-                placeholderTextColor={colors.textSecondary}
-                keyboardType={keyboardType}
-                multiline={multiline}
-                numberOfLines={multiline ? 3 : 1}
-              />
+              <>
+                <TextInput
+                  style={[
+                    styles.detailInput,
+                    multiline && styles.detailInputMultiline,
+                    fieldError && styles.detailInputError,
+                  ]}
+                  value={editFormData[field] || ""}
+                  onChangeText={(value) => handleFieldChange(field, value)}
+                  placeholder={`Enter ${label.toLowerCase()}`}
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType={keyboardType}
+                  multiline={multiline}
+                  numberOfLines={multiline ? 3 : 1}
+                />
+                {fieldError ? (
+                  <Text style={styles.fieldErrorText}>{fieldError}</Text>
+                ) : null}
+              </>
             ) : (
               <Text style={[styles.detailValue, styles.detailValueDisabled]}>
                 {getDisplayValue()}
@@ -713,7 +756,7 @@ const VenduDetailsScreen = () => {
 
     setIsSavingPreferences(true);
     try {
-      await api.updateVendorPlace(placeId, {
+      await api.updateVendorPlace({
         allow_overlapping_bookings: preferences.allow_overlapping_bookings,
         allow_multiple_hours_booking: preferences.allow_multiple_hours_booking,
         charge_per_guest: preferences.charge_per_guest,
@@ -1371,17 +1414,22 @@ const VenduDetailsScreen = () => {
             <>
               {/* Basic Information */}
               <View style={styles.detailRow}>
-                <Ionicons name="business" size={20} color={colors.primary} />
+                <Ionicons name="business" size={20} color={editErrors.name ? "#DC3545" : colors.primary} />
                 <View style={styles.detailContent}>
                   <Text style={styles.detailLabel}>Name</Text>
                   {isEditing ? (
-                    <TextInput
-                      style={styles.detailInput}
-                      value={editFormData.name}
-                      onChangeText={(value) => handleFieldChange("name", value)}
-                      placeholder="Enter name"
-                      placeholderTextColor={colors.textSecondary}
-                    />
+                    <>
+                      <TextInput
+                        style={[styles.detailInput, editErrors.name && styles.detailInputError]}
+                        value={editFormData.name}
+                        onChangeText={(value) => handleFieldChange("name", value)}
+                        placeholder="Enter name"
+                        placeholderTextColor={colors.textSecondary}
+                      />
+                      {editErrors.name ? (
+                        <Text style={styles.fieldErrorText}>{editErrors.name}</Text>
+                      ) : null}
+                    </>
                   ) : (
                     <Text style={styles.detailValue}>
                       {placeData.name || "Add details"}
@@ -1982,6 +2030,16 @@ const styles = StyleSheet.create({
   detailInputMultiline: {
     minHeight: 80,
     textAlignVertical: "top",
+  },
+  detailInputError: {
+    borderColor: "#DC3545",
+    borderWidth: 1.5,
+  },
+  fieldErrorText: {
+    color: "#DC3545",
+    fontSize: 12,
+    fontFamily: fonts.regular,
+    marginTop: 4,
   },
   detailDropdown: {
     flexDirection: "row",

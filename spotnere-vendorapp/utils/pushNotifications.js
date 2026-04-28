@@ -45,7 +45,7 @@ async function getExpoPushToken() {
   try {
     const projectId = Constants.expoConfig?.extra?.eas?.projectId;
     if (!projectId) {
-      console.warn("EAS projectId not found in app config");
+      console.warn("[Push] EAS projectId not found in app config");
       return null;
     }
 
@@ -55,7 +55,14 @@ async function getExpoPushToken() {
 
     return tokenData?.data ?? null;
   } catch (error) {
-    console.error("Error getting Expo push token:", error);
+    const msg = error?.message || "";
+    if (msg.includes("FIS_AUTH_ERROR")) {
+      console.warn(
+        "[Push] Firebase auth failed — rebuild the app after verifying google-services.json matches your Firebase project. Push notifications disabled for this session."
+      );
+    } else {
+      console.warn("[Push] Could not get push token:", msg);
+    }
     return null;
   }
 }
@@ -82,7 +89,7 @@ export async function registerAndStorePushToken(vendorId) {
       return { success: false, error: "Could not get push token" };
     }
 
-    await api.updatePushToken(vendorId, token);
+    await api.updatePushToken(token);
     return { success: true };
   } catch (error) {
     console.error("Error registering push token:", error);
@@ -104,7 +111,7 @@ export async function clearPushToken(vendorId) {
   }
 
   try {
-    await api.updatePushToken(vendorId, null);
+    await api.updatePushToken(null);
     return { success: true };
   } catch (error) {
     console.error("Error clearing push token:", error);

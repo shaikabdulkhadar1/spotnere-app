@@ -1,9 +1,11 @@
 /**
  * Vendor API Client
  * All API calls go through the backend server.
+ * Authenticated routes send the Supabase JWT as a Bearer token.
  */
 
 import Constants from "expo-constants";
+import { supabase } from "../config/supabase";
 
 const API_BASE = (
   process.env.EXPO_PUBLIC_API_BASE_URL ||
@@ -11,8 +13,14 @@ const API_BASE = (
   "http://localhost:5001"
 ).replace(/\/$/, "");
 
-// TEMP: remove after debugging
-console.log("[Vendor API] Base URL:", API_BASE);
+async function getAccessToken() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token || null;
+  } catch {
+    return null;
+  }
+}
 
 async function request(method, path, body = null, query = null) {
   let url = `${API_BASE}${path}`;
@@ -24,6 +32,12 @@ async function request(method, path, body = null, query = null) {
     "Content-Type": "application/json",
     "ngrok-skip-browser-warning": "true",
   };
+
+  const token = await getAccessToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const opts = { method, headers };
   if (body && (method === "POST" || method === "PATCH" || method === "PUT" || method === "DELETE")) {
     opts.body = JSON.stringify(body);
@@ -40,7 +54,7 @@ async function request(method, path, body = null, query = null) {
 }
 
 export const api = {
-  // Auth
+  // Auth (no Bearer token needed — these are pre-login)
   vendorRegister: (formData) =>
     request("POST", "/api/vendor/auth/register", {
       businessName: formData.businessName,
@@ -65,61 +79,62 @@ export const api = {
   vendorLogin: (email, password) =>
     request("POST", "/api/vendor/auth/login", { email, password }),
 
+  // All routes below are JWT-protected — vendorId/placeId come from the token
+
   // Bookings
-  getVendorBookings: (placeId) =>
-    request("GET", "/api/vendor/bookings", null, { placeId }),
+  getVendorBookings: () =>
+    request("GET", "/api/vendor/bookings"),
 
   // Reviews
-  getVendorReviews: (placeId) =>
-    request("GET", "/api/vendor/reviews", null, { placeId }),
+  getVendorReviews: () =>
+    request("GET", "/api/vendor/reviews"),
 
   // Place
-  getVendorPlace: (placeId) =>
-    request("GET", "/api/vendor/place", null, { placeId }),
-  updateVendorPlace: (placeId, patch) =>
-    request("PATCH", "/api/vendor/place", { placeId, ...patch }),
+  getVendorPlace: () =>
+    request("GET", "/api/vendor/place"),
+  updateVendorPlace: (patch) =>
+    request("PATCH", "/api/vendor/place", patch),
 
   // Notifications
-  getVendorNotifications: (vendorId) =>
-    request("GET", "/api/vendor/notifications", null, { vendorId }),
-  markNotificationsRead: (vendorId) =>
-    request("POST", "/api/vendor/notifications/mark-read", { vendorId }),
+  getVendorNotifications: () =>
+    request("GET", "/api/vendor/notifications"),
+  markNotificationsRead: () =>
+    request("POST", "/api/vendor/notifications/mark-read"),
 
   // Gallery
-  getVendorGallery: (placeId) =>
-    request("GET", "/api/vendor/gallery", null, { placeId }),
-  addGalleryImages: (placeId, images) =>
-    request("POST", "/api/vendor/gallery", { placeId, images }),
+  getVendorGallery: () =>
+    request("GET", "/api/vendor/gallery"),
+  addGalleryImages: (images) =>
+    request("POST", "/api/vendor/gallery", { images }),
   deleteGalleryImages: (ids) =>
     request("DELETE", "/api/vendor/gallery", { ids }),
 
   // Profile
-  getVendorProfile: (vendorId) =>
-    request("GET", "/api/vendor/profile", null, { vendorId }),
-  updateVendorProfile: (vendorId, patch) =>
-    request("PATCH", "/api/vendor/profile", { vendorId, ...patch }),
+  getVendorProfile: () =>
+    request("GET", "/api/vendor/profile"),
+  updateVendorProfile: (patch) =>
+    request("PATCH", "/api/vendor/profile", patch),
 
   // Password
-  updateVendorPassword: (vendorId, currentPassword, newPassword) =>
+  updateVendorPassword: (currentPassword, newPassword) =>
     request("PATCH", "/api/vendor/password", {
-      vendorId,
       currentPassword,
       newPassword,
     }),
 
   // Push token
-  updatePushToken: (vendorId, push_token) =>
-    request("PATCH", "/api/vendor/push-token", { vendorId, push_token }),
+  updatePushToken: (push_token) =>
+    request("PATCH", "/api/vendor/push-token", { push_token }),
 
   // Onboarding
-  getOnboardingStatus: (vendorId) =>
-    request("GET", "/api/vendor/onboarding-status", null, { vendorId }),
+  getOnboardingStatus: () =>
+    request("GET", "/api/vendor/onboarding-status"),
 
   // Uploads (base64)
-  uploadBanner: (placeId, base64) =>
-    request("POST", "/api/vendor/upload-banner", { placeId, base64 }),
-  uploadGallery: (placeId, images) =>
-    request("POST", "/api/vendor/upload-gallery", { placeId, images }),
+  uploadBanner: (base64) =>
+    request("POST", "/api/vendor/upload-banner", { base64 }),
+  uploadGallery: (images) =>
+    request("POST", "/api/vendor/upload-gallery", { images }),
   removeStoragePaths: (paths) =>
     request("POST", "/api/vendor/storage/remove", { paths }),
 };

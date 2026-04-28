@@ -157,7 +157,7 @@ function AppContent() {
 
       const { api } = require("./api/client");
       const { placeDetailsComplete, bankDetailsComplete, preferencesComplete } =
-        await api.getOnboardingStatus(currentUser.id);
+        await api.getOnboardingStatus();
 
       const prefsDone = await isPreferencesOnboardingDone(
         currentUser.id,
@@ -188,7 +188,7 @@ function AppContent() {
     const currentUser = await getCurrentUser();
     if (currentUser?.id) {
       try {
-        const { bankDetailsComplete, preferencesComplete } = await api.getOnboardingStatus(currentUser.id);
+        const { bankDetailsComplete, preferencesComplete } = await api.getOnboardingStatus();
         const prefsDone = await isPreferencesOnboardingDone(
           currentUser.id,
           preferencesComplete,
@@ -226,7 +226,7 @@ function AppContent() {
     const currentUser = await getCurrentUser();
     if (currentUser?.id) {
       try {
-        const { placeDetailsComplete, preferencesComplete } = await api.getOnboardingStatus(currentUser.id);
+        const { placeDetailsComplete, preferencesComplete } = await api.getOnboardingStatus();
         const prefsDone = await isPreferencesOnboardingDone(
           currentUser.id,
           preferencesComplete,
@@ -246,6 +246,8 @@ function AppContent() {
     if (user?.id) {
       await clearPushToken(user.id);
     }
+    const { logout } = require("./utils/auth");
+    await logout();
     await clearCache();
     setIsAuthenticated(false);
     setActiveTab("home");

@@ -16,6 +16,7 @@ import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
 import { loginUser } from "../utils/auth";
 import RegistrationPage from "../components/RegistrationPage";
+import { rules, collectErrors } from "../utils/validate";
 
 const { width, height } = Dimensions.get("window");
 
@@ -40,19 +41,10 @@ const LoginScreen = ({ onLoginSuccess, onBack }) => {
 
 
   const validateForm = () => {
-    const newErrors = {};
-
-    if (!formData.email.trim()) {
-      newErrors.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = "Please enter a valid email address";
-    }
-
-    if (!formData.password.trim()) {
-      newErrors.password = "Password is required";
-    } else if (formData.password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters";
-    }
+    const newErrors = collectErrors({
+      email: rules.email(formData.email),
+      password: formData.password ? null : "Password is required",
+    });
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;

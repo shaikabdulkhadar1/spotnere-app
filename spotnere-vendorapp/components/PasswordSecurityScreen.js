@@ -19,6 +19,7 @@ import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
 import { useApp } from "../contexts/AppContext";
 import { api } from "../api/client";
+import { rules, collectErrors } from "../utils/validate";
 
 const PasswordSecurityScreen = ({ onBack }) => {
   const { user } = useApp();
@@ -32,27 +33,14 @@ const PasswordSecurityScreen = ({ onBack }) => {
   const [errors, setErrors] = React.useState({});
 
   const validateForm = () => {
-    const newErrors = {};
+    const newErrors = collectErrors({
+      currentPassword: rules.required(currentPassword, "Current password"),
+      newPassword: rules.password(newPassword),
+      confirmPassword: rules.confirmPassword(confirmPassword, newPassword),
+    });
 
-    if (!currentPassword.trim()) {
-      newErrors.currentPassword = "Current password is required";
-    }
-
-    if (!newPassword.trim()) {
-      newErrors.newPassword = "New password is required";
-    } else if (newPassword.length < 6) {
-      newErrors.newPassword = "Password must be at least 6 characters";
-    }
-
-    if (!confirmPassword.trim()) {
-      newErrors.confirmPassword = "Please confirm your new password";
-    } else if (newPassword !== confirmPassword) {
-      newErrors.confirmPassword = "Passwords do not match";
-    }
-
-    if (currentPassword === newPassword) {
-      newErrors.newPassword =
-        "New password must be different from current password";
+    if (!newErrors.newPassword && currentPassword && currentPassword === newPassword) {
+      newErrors.newPassword = "New password must be different from current password";
     }
 
     setErrors(newErrors);
@@ -71,7 +59,7 @@ const PasswordSecurityScreen = ({ onBack }) => {
 
     setIsSaving(true);
     try {
-      await api.updateVendorPassword(user.id, currentPassword, newPassword);
+      await api.updateVendorPassword(currentPassword, newPassword);
 
       Alert.alert("Success", "Password updated successfully", [
         {

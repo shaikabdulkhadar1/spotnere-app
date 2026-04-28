@@ -45,7 +45,7 @@ const PaymentInfoScreen = ({ onBack }) => {
         setLoading(true);
         setError(null);
 
-        const info = (await api.getVendorProfile(user.id)) || {};
+        const info = (await api.getVendorProfile()) || {};
         setPaymentInfo(info);
         setEditForm({
           account_holder_name: info.account_holder_name || "",

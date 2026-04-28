@@ -22,6 +22,7 @@ import { fonts } from "../constants/fonts";
 import { useApp } from "../contexts/AppContext";
 import { api } from "../api/client";
 import { Country, State, City } from "country-state-city";
+import { rules, collectErrors } from "../utils/validate";
 
 const ManageProfileScreen = ({ onBack }) => {
   const { user, refreshData } = useApp();
@@ -100,7 +101,7 @@ const ManageProfileScreen = ({ onBack }) => {
     }
 
     try {
-      const vendorData = await api.getVendorProfile(user.id);
+      const vendorData = await api.getVendorProfile();
       if (vendorData) {
         initializeFormData(vendorData);
       }
@@ -163,9 +164,32 @@ const ManageProfileScreen = ({ onBack }) => {
     setIsEditing(false);
   };
 
+  const [profileErrors, setProfileErrors] = React.useState({});
+
+  const validateProfile = () => {
+    const errs = collectErrors({
+      vendor_full_name: rules.medStr(editFormData.vendor_full_name, "Full name"),
+      vendor_phone_number: rules.phone(editFormData.vendor_phone_number, "Phone number"),
+      vendor_address: rules.medStrOptional(editFormData.vendor_address, "Address"),
+      vendor_city: rules.shortStrOptional(editFormData.vendor_city, "City"),
+      vendor_state: rules.shortStrOptional(editFormData.vendor_state, "State"),
+      vendor_country: rules.shortStrOptional(editFormData.vendor_country, "Country"),
+      vendor_postal_code: editFormData.vendor_postal_code
+        ? rules.postalCode(editFormData.vendor_postal_code)
+        : null,
+    });
+    setProfileErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
   const handleSave = async () => {
     if (!user?.id) {
       Alert.alert("Error", "User information not available");
+      return;
+    }
+
+    if (!validateProfile()) {
+      Alert.alert("Validation Error", "Please correct the highlighted errors.");
       return;
     }
 
@@ -176,7 +200,6 @@ const ManageProfileScreen = ({ onBack }) => {
         vendor_full_name: editFormData.vendor_full_name || null,
         vendor_phone_number: editFormData.vendor_phone_number || null,
         vendor_email: editFormData.vendor_email || null,
-        // Vendor address fields
         vendor_address: editFormData.vendor_address || null,
         vendor_city: editFormData.vendor_city || null,
         vendor_state: editFormData.vendor_state || null,
@@ -184,7 +207,7 @@ const ManageProfileScreen = ({ onBack }) => {
         vendor_postal_code: editFormData.vendor_postal_code || null,
       };
 
-      await api.updateVendorProfile(user.id, updateData);
+      await api.updateVendorProfile(updateData);
 
       Alert.alert("Success", "Profile updated successfully");
       setIsEditing(false);
@@ -239,20 +262,27 @@ const ManageProfileScreen = ({ onBack }) => {
       );
     }
 
+    const fieldError = profileErrors[fieldKey];
     return (
       <View style={styles.detailItem}>
         <View style={styles.detailTextContainer}>
           <Text style={styles.detailLabel}>{label}</Text>
           <TextInput
-            style={styles.detailInput}
+            style={[styles.detailInput, fieldError && styles.detailInputError]}
             value={value}
-            onChangeText={(text) =>
-              setEditFormData({ ...editFormData, [fieldKey]: text })
-            }
+            onChangeText={(text) => {
+              setEditFormData({ ...editFormData, [fieldKey]: text });
+              if (profileErrors[fieldKey]) {
+                setProfileErrors((prev) => ({ ...prev, [fieldKey]: null }));
+              }
+            }}
             placeholder={placeholder}
             placeholderTextColor={colors.textSecondary}
             keyboardType={keyboardType}
           />
+          {fieldError ? (
+            <Text style={styles.fieldErrorText}>{fieldError}</Text>
+          ) : null}
         </View>
       </View>
     );
@@ -795,6 +825,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingVertical: 4,
+  },
+  detailInputError: {
+    borderBottomColor: "#DC3545",
+    borderBottomWidth: 2,
+  },
+  fieldErrorText: {
+    color: "#DC3545",
+    fontSize: 12,
+    fontFamily: fonts.regular,
+    marginTop: 4,
   },
   divider: {
     height: 1,

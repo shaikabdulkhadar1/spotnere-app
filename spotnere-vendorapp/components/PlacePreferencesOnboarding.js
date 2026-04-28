@@ -67,7 +67,7 @@ const PlacePreferencesOnboarding = ({ onComplete }) => {
 
     setIsSubmitting(true);
     try {
-      await api.updateVendorPlace(user.place_id, {
+      await api.updateVendorPlace({
         allow_overlapping_bookings: preferences.allow_overlapping_bookings,
         allow_multiple_hours_booking: preferences.allow_multiple_hours_booking,
         charge_per_guest: preferences.charge_per_guest,

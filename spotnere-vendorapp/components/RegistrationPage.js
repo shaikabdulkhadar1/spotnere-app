@@ -23,6 +23,7 @@ import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
 import { Country, State, City } from "country-state-city";
 import { registerUser } from "../utils/auth";
+import { rules, collectErrors } from "../utils/validate";
 
 const { width, height } = Dimensions.get("window");
 
@@ -261,142 +262,71 @@ const RegistrationPage = ({ onRegistrationSuccess, onBack, onSwitchToLogin }) =>
   };
 
   const validateCurrentStep = () => {
-    const newErrors = {};
+    let checks = {};
 
     switch (currentStep) {
-      case 1: // Login Details
-        if (!formData.email.trim()) {
-          newErrors.email = "Email is required";
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-          newErrors.email = "Please enter a valid email address";
-        }
-        if (!formData.password.trim()) {
-          newErrors.password = "Password is required";
-        } else if (formData.password.length < 6) {
-          newErrors.password = "Password must be at least 6 characters";
-        }
-        if (!formData.confirmPassword.trim()) {
-          newErrors.confirmPassword = "Please confirm your password";
-        } else if (formData.password !== formData.confirmPassword) {
-          newErrors.confirmPassword = "Passwords do not match";
-        }
+      case 1:
+        checks = {
+          email: rules.email(formData.email),
+          password: rules.password(formData.password),
+          confirmPassword: rules.confirmPassword(formData.confirmPassword, formData.password),
+        };
         break;
-
-      case 2: // Business Information
-        if (!formData.businessName.trim()) {
-          newErrors.businessName = "Business name is required";
-        }
-        if (!formData.businessCategory.trim()) {
-          newErrors.businessCategory = "Business category is required";
-        }
+      case 2:
+        checks = {
+          businessName: rules.medStr(formData.businessName, "Business name"),
+          businessCategory: rules.shortStr(formData.businessCategory, "Business category"),
+        };
         break;
-
-      case 3: // Business Address Information
-        if (!formData.address.trim()) {
-          newErrors.address = "Address is required";
-        }
-        if (!formData.country.trim()) {
-          newErrors.country = "Country is required";
-        }
-        if (!formData.state.trim()) {
-          newErrors.state = "State is required";
-        }
-        if (!formData.city.trim()) {
-          newErrors.city = "City is required";
-        }
-        if (!formData.postalCode.trim()) {
-          newErrors.postalCode = "Postal code is required";
-        }
-        if (!formData.businessPhoneNumber.trim()) {
-          newErrors.businessPhoneNumber = "Business phone number is required";
-        } else if (!/^[\d\s\-\+\(\)]+$/.test(formData.businessPhoneNumber)) {
-          newErrors.businessPhoneNumber = "Please enter a valid phone number";
-        }
+      case 3:
+        checks = {
+          address: rules.medStr(formData.address, "Address"),
+          country: rules.shortStr(formData.country, "Country"),
+          state: rules.shortStr(formData.state, "State"),
+          city: rules.shortStr(formData.city, "City"),
+          postalCode: rules.postalCode(formData.postalCode),
+          businessPhoneNumber: rules.phone(formData.businessPhoneNumber, "Business phone number"),
+        };
         break;
-
-      case 4: // Vendor/Business Owner Details
-        if (!formData.vendorFullName.trim()) {
-          newErrors.vendorFullName = "Vendor full name is required";
-        }
-        if (!formData.vendorPhoneNumber.trim()) {
-          newErrors.vendorPhoneNumber = "Vendor phone number is required";
-        } else if (!/^[\d\s\-\+\(\)]+$/.test(formData.vendorPhoneNumber)) {
-          newErrors.vendorPhoneNumber = "Please enter a valid phone number";
-        }
-        if (!formData.vendorAddress.trim()) {
-          newErrors.vendorAddress = "Vendor address is required";
-        }
-        if (!formData.vendorCountry.trim()) {
-          newErrors.vendorCountry = "Vendor country is required";
-        }
-        if (!formData.vendorState.trim()) {
-          newErrors.vendorState = "Vendor state is required";
-        }
-        if (!formData.vendorCity.trim()) {
-          newErrors.vendorCity = "Vendor city is required";
-        }
-        if (!formData.vendorPostalCode.trim()) {
-          newErrors.vendorPostalCode = "Vendor postal code is required";
-        }
+      case 4:
+        checks = {
+          vendorFullName: rules.medStr(formData.vendorFullName, "Full name"),
+          vendorPhoneNumber: rules.phone(formData.vendorPhoneNumber, "Phone number"),
+          vendorAddress: rules.medStr(formData.vendorAddress, "Address"),
+          vendorCountry: rules.shortStr(formData.vendorCountry, "Country"),
+          vendorState: rules.shortStr(formData.vendorState, "State"),
+          vendorCity: rules.shortStr(formData.vendorCity, "City"),
+          vendorPostalCode: rules.postalCode(formData.vendorPostalCode),
+        };
         break;
     }
 
+    const newErrors = collectErrors(checks);
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const validateForm = () => {
-    const newErrors = {};
-
-    if (!formData.businessName.trim()) {
-      newErrors.businessName = "Business name is required";
-    }
-    if (!formData.businessCategory.trim()) {
-      newErrors.businessCategory = "Business category is required";
-    }
-    if (!formData.vendorFullName.trim()) {
-      newErrors.vendorFullName = "Vendor full name is required";
-    }
-    if (!formData.businessPhoneNumber.trim()) {
-      newErrors.businessPhoneNumber = "Business phone number is required";
-    } else if (!/^[\d\s\-\+\(\)]+$/.test(formData.businessPhoneNumber)) {
-      newErrors.businessPhoneNumber = "Please enter a valid phone number";
-    }
-    if (!formData.vendorPhoneNumber.trim()) {
-      newErrors.vendorPhoneNumber = "Vendor phone number is required";
-    } else if (!/^[\d\s\-\+\(\)]+$/.test(formData.vendorPhoneNumber)) {
-      newErrors.vendorPhoneNumber = "Please enter a valid phone number";
-    }
-    if (!formData.email.trim()) {
-      newErrors.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = "Please enter a valid email address";
-    }
-    if (!formData.password.trim()) {
-      newErrors.password = "Password is required";
-    } else if (formData.password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters";
-    }
-    if (!formData.confirmPassword.trim()) {
-      newErrors.confirmPassword = "Please confirm your password";
-    } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = "Passwords do not match";
-    }
-    if (!formData.address.trim()) {
-      newErrors.address = "Address is required";
-    }
-    if (!formData.city.trim()) {
-      newErrors.city = "City is required";
-    }
-    if (!formData.state.trim()) {
-      newErrors.state = "State is required";
-    }
-    if (!formData.country.trim()) {
-      newErrors.country = "Country is required";
-    }
-    if (!formData.postalCode.trim()) {
-      newErrors.postalCode = "Postal code is required";
-    }
+    const newErrors = collectErrors({
+      email: rules.email(formData.email),
+      password: rules.password(formData.password),
+      confirmPassword: rules.confirmPassword(formData.confirmPassword, formData.password),
+      businessName: rules.medStr(formData.businessName, "Business name"),
+      businessCategory: rules.shortStr(formData.businessCategory, "Business category"),
+      address: rules.medStr(formData.address, "Address"),
+      country: rules.shortStr(formData.country, "Country"),
+      state: rules.shortStr(formData.state, "State"),
+      city: rules.shortStr(formData.city, "City"),
+      postalCode: rules.postalCode(formData.postalCode),
+      businessPhoneNumber: rules.phone(formData.businessPhoneNumber, "Business phone number"),
+      vendorFullName: rules.medStr(formData.vendorFullName, "Full name"),
+      vendorPhoneNumber: rules.phone(formData.vendorPhoneNumber, "Phone number"),
+      vendorAddress: rules.medStr(formData.vendorAddress, "Address"),
+      vendorCountry: rules.shortStr(formData.vendorCountry, "Country"),
+      vendorState: rules.shortStr(formData.vendorState, "State"),
+      vendorCity: rules.shortStr(formData.vendorCity, "City"),
+      vendorPostalCode: rules.postalCode(formData.vendorPostalCode),
+    });
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;

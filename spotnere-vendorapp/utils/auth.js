@@ -1,18 +1,34 @@
 /**
  * Authentication utilities for Spotnere Vendor App
- * Handles vendor registration and login via backend API
+ * Backend API handles credential verification + Supabase Auth account creation.
+ * Client establishes a Supabase Auth session afterward for RLS-protected queries.
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "../api/client";
+import { supabase } from "../config/supabase";
 
 const AUTH_STORAGE_KEY = "@spotnere_vendor_auth";
 const USER_STORAGE_KEY = "@spotnere_vendor_user";
 
 /**
- * Register a new vendor (creates place + vendor via backend)
- * @param {Object} formData - Vendor registration data
- * @returns {Promise<Object>} - Result object with success status and user/error
+ * Establish a Supabase Auth session on the client.
+ * Called after backend confirms credentials so the Supabase client
+ * carries a JWT for RLS-protected reads and Realtime.
+ */
+async function establishSupabaseSession(email, password) {
+  try {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      console.warn("[Auth] Supabase session failed (non-fatal):", error.message);
+    }
+  } catch (err) {
+    console.warn("[Auth] Supabase session error (non-fatal):", err?.message);
+  }
+}
+
+/**
+ * Register a new vendor (creates Supabase Auth user + place + vendor via backend)
  */
 export const registerUser = async (formData) => {
   try {
@@ -22,6 +38,9 @@ export const registerUser = async (formData) => {
     }
     await AsyncStorage.setItem(AUTH_STORAGE_KEY, "true");
     await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+
+    await establishSupabaseSession(formData.email, formData.password);
+
     return { success: true, user };
   } catch (error) {
     console.error("Error registering user:", error);
@@ -33,10 +52,8 @@ export const registerUser = async (formData) => {
 };
 
 /**
- * Login vendor
- * @param {string} email - Vendor business email
- * @param {string} password - Vendor password
- * @returns {Promise<Object>} - Result object with success status and user/error
+ * Login vendor — backend verifies credentials (and lazily creates Supabase
+ * Auth account for existing vendors), then we establish a local session.
  */
 export const loginUser = async (email, password) => {
   try {
@@ -46,6 +63,9 @@ export const loginUser = async (email, password) => {
     }
     await AsyncStorage.setItem(AUTH_STORAGE_KEY, "true");
     await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+
+    await establishSupabaseSession(email, password);
+
     return { success: true, user };
   } catch (error) {
     console.error("Error logging in:", error);
@@ -57,10 +77,11 @@ export const loginUser = async (email, password) => {
 };
 
 /**
- * Logout vendor
+ * Logout vendor — clears both local storage and Supabase Auth session.
  */
 export const logout = async () => {
   try {
+    await supabase.auth.signOut();
     await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
     await AsyncStorage.removeItem(USER_STORAGE_KEY);
   } catch (error) {
@@ -87,7 +108,7 @@ export const getCurrentUser = async () => {
 };
 
 /**
- * Check if vendor is logged in
+ * Check if vendor is logged in (checks both local flag and Supabase session).
  * @returns {Promise<boolean>} - True if logged in
  */
 export const isLoggedIn = async () => {
@@ -110,7 +131,7 @@ export const updateUserData = async (userData) => {
     const currentUser = await getCurrentUser();
     if (!currentUser) throw new Error("No user logged in");
 
-    await api.updateVendorProfile(currentUser.id, userData);
+    await api.updateVendorProfile(userData);
     const updated = { ...currentUser, ...userData };
     await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
     return updated;

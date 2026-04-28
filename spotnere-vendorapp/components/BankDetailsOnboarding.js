@@ -22,6 +22,7 @@ import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
 import { api } from "../api/client";
 import { useApp } from "../contexts/AppContext";
+import { rules, collectErrors } from "../utils/validate";
 
 const BankDetailsOnboarding = ({ onComplete }) => {
   const { user, refreshData } = useApp();
@@ -43,29 +44,12 @@ const BankDetailsOnboarding = ({ onComplete }) => {
   };
 
   const validateForm = () => {
-    const newErrors = {};
-
-    if (!formData.account_holder_name.trim()) {
-      newErrors.account_holder_name = "Account holder name is required";
-    }
-
-    if (!formData.account_number.trim()) {
-      newErrors.account_number = "Account number is required";
-    } else if (!/^\d+$/.test(formData.account_number.trim())) {
-      newErrors.account_number = "Account number must contain only numbers";
-    }
-
-    if (!formData.ifsc_code.trim()) {
-      newErrors.ifsc_code = "IFSC code is required";
-    } else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(formData.ifsc_code.trim().toUpperCase())) {
-      newErrors.ifsc_code = "Please enter a valid IFSC code (e.g., ABCD0123456)";
-    }
-
-    if (!formData.upi_id.trim()) {
-      newErrors.upi_id = "UPI ID is required";
-    } else if (!/^[\w.-]+@[\w]+$/.test(formData.upi_id.trim())) {
-      newErrors.upi_id = "Please enter a valid UPI ID (e.g., name@paytm)";
-    }
+    const newErrors = collectErrors({
+      account_holder_name: rules.medStr(formData.account_holder_name, "Account holder name"),
+      account_number: rules.accountNumber(formData.account_number),
+      ifsc_code: rules.ifsc(formData.ifsc_code),
+      upi_id: rules.upi(formData.upi_id),
+    });
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -95,7 +79,7 @@ const BankDetailsOnboarding = ({ onComplete }) => {
         upi_id: formData.upi_id.trim(),
       };
 
-      await api.updateVendorProfile(user.id, updateData);
+      await api.updateVendorProfile(updateData);
 
       // Refresh user data
       await refreshData();

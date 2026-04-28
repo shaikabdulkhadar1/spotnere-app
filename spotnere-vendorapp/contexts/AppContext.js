@@ -140,7 +140,7 @@ export const AppProvider = ({ children }) => {
 
         setBookingsData((prev) => ({ ...prev, loading: true }));
 
-        const bookingsWithUserDetails = await api.getVendorBookings(user.place_id);
+        const bookingsWithUserDetails = await api.getVendorBookings();
 
         const totalBookings = bookingsWithUserDetails?.length || 0;
 
@@ -256,7 +256,7 @@ export const AppProvider = ({ children }) => {
 
         setReviewsData((prev) => ({ ...prev, loading: true, error: null }));
 
-        const { reviews, summary } = await api.getVendorReviews(user.place_id);
+        const { reviews, summary } = await api.getVendorReviews();
 
         if (!reviews || reviews.length === 0) {
           const emptyPayload = {
@@ -317,7 +317,7 @@ export const AppProvider = ({ children }) => {
       const vid = vendorId ?? user?.id;
       if (!vid) return;
       try {
-        await api.markNotificationsRead(vid);
+        await api.markNotificationsRead();
 
         // Update local state and cache
         setNotificationsData((prev) => {
@@ -352,7 +352,7 @@ export const AppProvider = ({ children }) => {
 
         setNotificationsData((prev) => ({ ...prev, loading: true, error: null }));
 
-        const { notifications: list, unreadCount } = await api.getVendorNotifications(vid);
+        const { notifications: list, unreadCount } = await api.getVendorNotifications();
 
         setNotificationsData({
           notifications: list,
@@ -421,7 +421,7 @@ export const AppProvider = ({ children }) => {
         if (!placeCacheHit) {
           // Cache miss - fetch fresh place data directly
           try {
-            const data = await api.getVendorPlace(currentUserData.place_id);
+            const data = await api.getVendorPlace();
 
             if (data) {
               setPlaceData(data);
@@ -498,7 +498,7 @@ export const AppProvider = ({ children }) => {
           const parsedPlace = JSON.parse(cachedPlace);
           const placeId = parsedPlace?.id;
           if (placeId) {
-            const placeFull = await api.getVendorPlace(placeId);
+            const placeFull = await api.getVendorPlace();
             setPlaceData({
               ...parsedPlace,
               banner_image_link: placeFull?.banner_image_link ?? null,
@@ -521,7 +521,7 @@ export const AppProvider = ({ children }) => {
     const placeId = user?.place_id || placeData?.id;
     if (!placeId) return;
     try {
-      const data = await api.getVendorPlace(placeId);
+      const data = await api.getVendorPlace();
       if (data) {
         setPlaceData((prev) =>
           prev ? { ...prev, banner_image_link: data.banner_image_link } : prev
@@ -551,7 +551,7 @@ export const AppProvider = ({ children }) => {
         }
 
         // Fetch fresh place data
-        const data = await api.getVendorPlace(user.place_id);
+        const data = await api.getVendorPlace();
 
         if (data) {
           setPlaceData(data);

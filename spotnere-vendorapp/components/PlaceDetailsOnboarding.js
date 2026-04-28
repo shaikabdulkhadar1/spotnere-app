@@ -24,6 +24,7 @@ import { colors } from "../constants/colors";
 import { fonts } from "../constants/fonts";
 import { api } from "../api/client";
 import { useApp } from "../contexts/AppContext";
+import { rules, collectErrors } from "../utils/validate";
 
 const DAYS_OF_WEEK = [
   "Monday",
@@ -94,35 +95,13 @@ const PlaceDetailsOnboarding = ({ onComplete, onNext }) => {
   };
 
   const validateForm = () => {
-    const newErrors = {};
+    const newErrors = collectErrors({
+      website: rules.url(formData.website, "Website"),
+      map_url: rules.url(formData.map_url, "Map URL"),
+      avg_price: rules.price(formData.avg_price, "Average price"),
+      description: rules.longStr(formData.description, "Description"),
+    });
 
-    // Website is required and must be valid URL format
-    if (!formData.website.trim()) {
-      newErrors.website = "Website is required";
-    } else if (!/^https?:\/\/.+/.test(formData.website.trim())) {
-      newErrors.website = "Please enter a valid URL (e.g., https://example.com)";
-    }
-
-    // Map URL is required and must be valid URL format
-    if (!formData.map_url.trim()) {
-      newErrors.map_url = "Map URL is required";
-    } else if (!/^https?:\/\/.+/.test(formData.map_url.trim())) {
-      newErrors.map_url = "Please enter a valid URL (e.g., https://maps.google.com/...)";
-    }
-
-    // Average price is required and must be a valid number
-    if (!formData.avg_price.trim()) {
-      newErrors.avg_price = "Average price is required";
-    } else if (isNaN(parseFloat(formData.avg_price)) || parseFloat(formData.avg_price) <= 0) {
-      newErrors.avg_price = "Please enter a valid positive number";
-    }
-
-    // Description is required
-    if (!formData.description.trim()) {
-      newErrors.description = "Description is required";
-    }
-
-    // Amenities is required - must have at least one amenity
     if (!formData.amenities || formData.amenities.length === 0) {
       newErrors.amenities = "At least one amenity is required";
     }
@@ -197,7 +176,7 @@ const PlaceDetailsOnboarding = ({ onComplete, onNext }) => {
         hours: hoursJsonb,
       };
 
-      await api.updateVendorPlace(user.place_id, updateData);
+      await api.updateVendorPlace(updateData);
 
       // Onboarding is considered completed when place details are saved
       // No need to update a flag - the presence of data indicates completion
