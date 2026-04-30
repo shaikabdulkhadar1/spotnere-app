@@ -5,7 +5,7 @@
  * ✅ Better touch targets + subtle elevation + iOS/Android friendly rounded corners
  */
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -18,7 +18,7 @@ import {
 import { Image as ExpoImage } from "expo-image";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { getCurrentUser } from "../utils/auth";
 import {
@@ -41,6 +41,8 @@ const PlaceCard = ({
   onPress,
   onImageLoad,
 }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [isFavorited, setIsFavorited] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -121,8 +123,10 @@ const PlaceCard = ({
         {showBadge ? (
           <View style={styles.topLeft}>
             <BlurView intensity={18} tint="light" style={styles.chipBlur}>
-              <Ionicons name="sparkles" size={12} color={colors.text} />
-              <Text style={styles.chipText}>Guest favorite</Text>
+              <Ionicons name="sparkles" size={12} color="#000" />
+              <Text style={[styles.chipText, { color: "#000" }]}>
+                Guest favorite
+              </Text>
             </BlurView>
           </View>
         ) : null}
@@ -139,7 +143,7 @@ const PlaceCard = ({
               <Ionicons
                 name={isFavorited ? "heart" : "heart-outline"}
                 size={16}
-                color={isFavorited ? "#FF3B30" : colors.text}
+                color={isFavorited ? "#FF3B30" : "#000"}
               />
             </Animated.View>
           </BlurView>
@@ -149,7 +153,7 @@ const PlaceCard = ({
         <View style={styles.bottomLeft}>
           <BlurView intensity={18} tint="light" style={styles.ratingChipBlur}>
             <Ionicons name="star" size={12} color={colors.accent} />
-            <Text style={styles.ratingChipText}>
+            <Text style={[styles.ratingChipText, { color: "#000" }]}>
               {rating != null && rating !== "" ? rating : "—"}
             </Text>
           </BlurView>
@@ -177,136 +181,137 @@ const PlaceCard = ({
   );
 };
 
-const styles = StyleSheet.create({
-  card: {
-    marginRight: 12,
-    borderRadius: 18,
-    backgroundColor: colors.cardBackground,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: Platform.OS === "android" ? "hidden" : "visible",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOpacity: 0.07,
-        shadowRadius: 14,
-        shadowOffset: { width: 0, height: 6 },
-      },
-      android: { elevation: 3 },
-    }),
-  },
+const createStyles = (colors) =>
+  StyleSheet.create({
+    card: {
+      marginRight: 12,
+      borderRadius: 18,
+      backgroundColor: colors.cardBackground,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: Platform.OS === "android" ? "hidden" : "visible",
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.shadow,
+          shadowOpacity: 0.07,
+          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 6 },
+        },
+        android: { elevation: 3 },
+      }),
+    },
 
-  media: {
-    width: "100%",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    backgroundColor: colors.surface,
-    overflow: "hidden",
-    position: "relative",
-  },
-  mediaImg: { width: "100%", height: "100%" },
+    media: {
+      width: "100%",
+      borderTopLeftRadius: 18,
+      borderTopRightRadius: 18,
+      backgroundColor: colors.surface,
+      overflow: "hidden",
+      position: "relative",
+    },
+    mediaImg: { width: "100%", height: "100%" },
 
-  // simple overlay without adding new dependencies
-  mediaGradient: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    top: 0,
-    backgroundColor: "rgba(0,0,0,0.10)",
-  },
+    // simple overlay without adding new dependencies
+    mediaGradient: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      top: 0,
+      backgroundColor: "rgba(0,0,0,0.10)",
+    },
 
-  topLeft: { position: "absolute", top: 10, left: 10 },
-  bottomLeft: { position: "absolute", bottom: 10, left: 10 },
+    topLeft: { position: "absolute", top: 10, left: 10 },
+    bottomLeft: { position: "absolute", bottom: 10, left: 10 },
 
-  topRightBtn: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    overflow: "hidden",
-  },
+    topRightBtn: {
+      position: "absolute",
+      top: 10,
+      right: 10,
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      overflow: "hidden",
+    },
 
-  chipBlur: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.65)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.45)",
-  },
-  chipText: {
-    fontSize: 9,
-    fontFamily: fonts.semiBold,
-    color: colors.text,
-  },
+    chipBlur: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderRadius: 999,
+      backgroundColor: "rgba(255,255,255,0.65)",
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.45)",
+    },
+    chipText: {
+      fontSize: 9,
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+    },
 
-  iconBlur: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.65)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.45)",
-    borderRadius: 17,
-  },
+    iconBlur: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: "rgba(255,255,255,0.65)",
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.45)",
+      borderRadius: 17,
+    },
 
-  ratingChipBlur: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.65)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.45)",
-  },
-  ratingChipText: {
-    fontSize: 11,
-    fontFamily: fonts.semiBold,
-    color: colors.text,
-  },
+    ratingChipBlur: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderRadius: 999,
+      backgroundColor: "rgba(255,255,255,0.65)",
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.45)",
+    },
+    ratingChipText: {
+      fontSize: 11,
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+    },
 
-  content: {
-    padding: 12,
-    paddingTop: 10,
-  },
-  contentSmall: {
-    padding: 10,
-    paddingTop: 8,
-  },
+    content: {
+      padding: 12,
+      paddingTop: 10,
+    },
+    contentSmall: {
+      padding: 10,
+      paddingTop: 8,
+    },
 
-  title: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: colors.text,
-    marginBottom: 6,
-    letterSpacing: -0.2,
-  },
-  titleSmall: {
-    fontSize: 12,
-    marginBottom: 5,
-  },
+    title: {
+      fontSize: 14,
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+      marginBottom: 6,
+      letterSpacing: -0.2,
+    },
+    titleSmall: {
+      fontSize: 12,
+      marginBottom: 5,
+    },
 
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  price: {
-    fontSize: 13,
-    fontFamily: fonts.regular,
-    color: colors.textSecondary,
-  },
-  priceSmall: {
-    fontSize: 12,
-  },
-});
+    metaRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    price: {
+      fontSize: 13,
+      fontFamily: fonts.regular,
+      color: colors.textSecondary,
+    },
+    priceSmall: {
+      fontSize: 12,
+    },
+  });
 
 export default PlaceCard;

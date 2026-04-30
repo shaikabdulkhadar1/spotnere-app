@@ -10,7 +10,7 @@ export default {
     name: "Spotnere Vendor",
     owner: "shaikabdulkhadar571",
     slug: "spotnere-vendor",
-    version: "1.0.3",
+    version: "1.1.1",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -37,7 +37,7 @@ export default {
     },
     android: {
       package: "com.spotnere.vendor",
-      versionCode: 3,
+      versionCode: 11,
       googleServicesFile: "./google-services.json",
       adaptiveIcon: {
         foregroundImage: "./assets/icons/adaptive-icon.png",

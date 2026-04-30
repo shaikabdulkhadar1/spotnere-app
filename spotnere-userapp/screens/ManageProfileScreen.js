@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -15,10 +15,11 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SvgUri } from "react-native-svg";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { api } from "../api/client";
 import { updateUserData, getCurrentUser } from "../utils/auth";
+import { rules, collectErrors } from "../utils/validate";
 import { Country, State, City } from "country-state-city";
 import {
   AVATAR_STYLE_OPTIONS,
@@ -32,6 +33,9 @@ import {
 const { width, height } = Dimensions.get("window");
 
 const ManageProfileScreen = ({ userData: initialUserData, onBack }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [userData, setUserData] = useState(initialUserData);
@@ -53,6 +57,7 @@ const ManageProfileScreen = ({ userData: initialUserData, onBack }) => {
   const [showCityModal, setShowCityModal] = useState(false);
   const [avatarStyle, setAvatarStyle] = useState(DEFAULT_AVATAR_STYLE);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const [profileErrors, setProfileErrors] = useState({});
 
   // Get countries, states, and cities from library
   const countries = Country.getAllCountries();
@@ -100,6 +105,7 @@ const ManageProfileScreen = ({ userData: initialUserData, onBack }) => {
 
   const handleCancel = () => {
     setIsEditing(false);
+    setProfileErrors({});
     // Reset form data to original user data
     setFormData({
       firstName: userData?.firstName || "",
@@ -114,7 +120,28 @@ const ManageProfileScreen = ({ userData: initialUserData, onBack }) => {
     });
   };
 
+  const validateProfile = () => {
+    const errs = collectErrors({
+      firstName: rules.shortStr(formData.firstName, "First name"),
+      lastName: rules.shortStr(formData.lastName, "Last name"),
+      phoneNumber: rules.phone(formData.phoneNumber),
+      email: rules.email(formData.email),
+      address: rules.medStr(formData.address, "Address"),
+      city: rules.shortStr(formData.city, "City"),
+      state: rules.shortStr(formData.state, "State"),
+      country: rules.shortStr(formData.country, "Country"),
+      postalCode: rules.postalCode(formData.postalCode),
+    });
+    setProfileErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
   const handleSave = async () => {
+    if (!validateProfile()) {
+      Alert.alert("Validation Error", "Please fix the highlighted fields.");
+      return;
+    }
+
     try {
       setIsSaving(true);
 
@@ -123,7 +150,7 @@ const ManageProfileScreen = ({ userData: initialUserData, onBack }) => {
         return;
       }
 
-      await api.updateProfile(userData.id, {
+      await api.updateProfile({
         firstName: formData.firstName,
         lastName: formData.lastName,
         phoneNumber: formData.phoneNumber,
@@ -169,21 +196,26 @@ const ManageProfileScreen = ({ userData: initialUserData, onBack }) => {
 
   const renderInfoRow = (label, value, icon, fieldKey) => {
     if (isEditing && fieldKey) {
+      const hasError = !!profileErrors[fieldKey];
       return (
         <View style={styles.infoRow}>
           <View style={styles.infoRowLeft}>
-            <Ionicons name={icon} size={20} color={colors.textSecondary} />
-            <Text style={styles.infoLabel}>{label}</Text>
+            <Ionicons name={icon} size={20} color={hasError ? colors.error : colors.textSecondary} />
+            <Text style={[styles.infoLabel, hasError && { color: colors.error }]}>{label}</Text>
           </View>
           <TextInput
-            style={styles.infoInput}
+            style={[styles.infoInput, hasError && { borderColor: colors.error, borderWidth: 1 }]}
             value={formData[fieldKey] || ""}
-            onChangeText={(text) =>
-              setFormData({ ...formData, [fieldKey]: text })
-            }
+            onChangeText={(text) => {
+              setFormData({ ...formData, [fieldKey]: text });
+              if (profileErrors[fieldKey]) {
+                setProfileErrors((prev) => ({ ...prev, [fieldKey]: null }));
+              }
+            }}
             placeholder="Not provided"
             placeholderTextColor={colors.textSecondary}
           />
+          {hasError && <Text style={{ color: colors.error, fontSize: 11, marginTop: 2, fontFamily: fonts.regular }}>{profileErrors[fieldKey]}</Text>}
         </View>
       );
     }
@@ -544,7 +576,7 @@ const ManageProfileScreen = ({ userData: initialUserData, onBack }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   scrollView: {
     flex: 1,
     backgroundColor: colors.background,

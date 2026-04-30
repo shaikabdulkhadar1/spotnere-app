@@ -24,6 +24,9 @@ import crypto from "node:crypto";
 import Razorpay from "razorpay";
 import { createClient } from "@supabase/supabase-js";
 import { DateTime } from "luxon";
+import bcrypt from "bcrypt";
+import rateLimit from "express-rate-limit";
+import { body, param, validationResult } from "express-validator";
 
 const app = express();
 
@@ -147,6 +150,149 @@ app.post(
 
 // JSON body parser for normal routes (increase limit for base64 image uploads)
 app.use(express.json({ limit: "10mb" }));
+
+// ---------- Rate Limiting ----------
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many attempts. Please try again in 15 minutes." },
+});
+
+// ---------- Input Validation ----------
+function handleValidationErrors(req, res, next) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ error: errors.array()[0].msg });
+  }
+  next();
+}
+
+const MAX_SHORT = 100;
+const MAX_MEDIUM = 255;
+const MAX_LONG = 2000;
+const MAX_URL = 2048;
+const PASSWORD_MIN = 8;
+
+// Reusable field-level validators
+const v = {
+  email: body("email")
+    .trim().toLowerCase().isEmail().withMessage("Valid email is required")
+    .isLength({ max: MAX_MEDIUM }).withMessage("Email too long"),
+  password: body("password")
+    .isLength({ min: PASSWORD_MIN }).withMessage(`Password must be at least ${PASSWORD_MIN} characters`)
+    .isLength({ max: MAX_MEDIUM }).withMessage("Password too long"),
+  currentPassword: body("currentPassword")
+    .notEmpty().withMessage("Current password is required")
+    .isLength({ max: MAX_MEDIUM }),
+  newPassword: body("newPassword")
+    .isLength({ min: PASSWORD_MIN }).withMessage(`New password must be at least ${PASSWORD_MIN} characters`)
+    .isLength({ max: MAX_MEDIUM }).withMessage("Password too long"),
+  shortStr: (field, label) =>
+    body(field).optional().trim().stripLow(true)
+      .isLength({ max: MAX_SHORT }).withMessage(`${label} too long (max ${MAX_SHORT} chars)`),
+  medStr: (field, label) =>
+    body(field).optional().trim().stripLow(true)
+      .isLength({ max: MAX_MEDIUM }).withMessage(`${label} too long (max ${MAX_MEDIUM} chars)`),
+  longStr: (field, label) =>
+    body(field).optional().trim().stripLow(true)
+      .isLength({ max: MAX_LONG }).withMessage(`${label} too long (max ${MAX_LONG} chars)`),
+  phone: (field, label = "Phone number") =>
+    body(field).optional().trim().isLength({ max: 20 }).withMessage(`${label} too long`)
+      .matches(/^[+\d\s()-]*$/).withMessage(`${label} contains invalid characters`),
+  url: (field, label = "URL") =>
+    body(field).optional().trim().isLength({ max: MAX_URL }).withMessage(`${label} too long`)
+      .isURL().withMessage(`${label} must be a valid URL`),
+  postalCode: (field) =>
+    body(field).optional().trim().isLength({ max: 20 }).withMessage("Postal code too long")
+      .matches(/^[\w\s-]*$/).withMessage("Postal code contains invalid characters"),
+  price: (field) =>
+    body(field).optional().isFloat({ min: 0, max: 999999 }).withMessage("Invalid price"),
+  bool: (field) =>
+    body(field).optional().isBoolean().withMessage(`${field} must be true or false`),
+  base64: (field) =>
+    body(field).notEmpty().withMessage("Image data required")
+      .isLength({ max: 10 * 1024 * 1024 }).withMessage("Image too large (max 10MB)"),
+  uuidParam: (field) =>
+    param(field).isUUID().withMessage(`${field} must be a valid UUID`),
+};
+
+// ---------- JWT Auth Middleware ----------
+// Verifies the Supabase JWT from Authorization header and injects req.vendorAuth.
+// Routes that require auth use: app.get("/path", requireVendorAuth, handler)
+async function requireVendorAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Missing or invalid authorization header" });
+  }
+  const token = authHeader.slice(7);
+
+  try {
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !user) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+
+    // Look up vendor by auth_user_id
+    const { data: vendor, error: vendorErr } = await supabaseAdmin
+      .from("vendors")
+      .select("id, place_id, vendor_email")
+      .eq("auth_user_id", user.id)
+      .maybeSingle();
+
+    if (vendorErr || !vendor) {
+      return res.status(403).json({ error: "No vendor account linked to this token" });
+    }
+
+    req.vendorAuth = {
+      authUserId: user.id,
+      vendorId: vendor.id,
+      placeId: vendor.place_id,
+      email: vendor.vendor_email,
+    };
+    next();
+  } catch (err) {
+    console.error("[Auth middleware] Error:", err?.message);
+    return res.status(401).json({ error: "Authentication failed" });
+  }
+}
+
+// Same pattern for user (customer) routes
+async function requireUserAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Missing or invalid authorization header" });
+  }
+  const token = authHeader.slice(7);
+
+  try {
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !user) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+
+    // Look up the user by auth_user_id to get the actual users.id
+    const { data: dbUser, error: dbErr } = await supabaseAdmin
+      .from("users")
+      .select("id, email")
+      .eq("auth_user_id", user.id)
+      .maybeSingle();
+    if (dbErr || !dbUser) {
+      return res.status(403).json({ error: "User account not found" });
+    }
+
+    req.userAuth = {
+      authUserId: user.id,
+      userId: dbUser.id,
+      email: dbUser.email,
+    };
+    next();
+  } catch (err) {
+    console.error("[Auth middleware] Error:", err?.message);
+    return res.status(401).json({ error: "Authentication failed" });
+  }
+}
 
 // ---------- Helpers ----------
 const inrToPaise = (amountInr) => Math.round(Number(amountInr) * 100);
@@ -466,10 +612,10 @@ app.get("/api/bookings/booked-slots", async (req, res) => {
  * bookingDateTimeLocal: "2025-01-27T10:00:00" (venue local, no Z)
  * timezone: IANA string e.g. "Asia/Kolkata"
  */
-app.post("/bookings/create-and-order", async (req, res) => {
+app.post("/bookings/create-and-order", requireUserAuth, async (req, res) => {
   try {
+    const userId = req.userAuth.userId;
     const {
-      userId,
       placeId,
       bookingDateTimeLocal,
       timezone,
@@ -496,9 +642,9 @@ app.post("/bookings/create-and-order", async (req, res) => {
       }
     }
 
-    if (!userId || !placeId || !bookingDateTime) {
+    if (!placeId || !bookingDateTime) {
       return res.status(400).json({
-        error: "userId, placeId, and bookingDateTimeLocal+timezone (or bookingDateTime) are required",
+        error: "placeId and bookingDateTimeLocal+timezone (or bookingDateTime) are required",
       });
     }
     if (!amountInr || Number(amountInr) <= 0) {
@@ -1015,14 +1161,15 @@ app.get("/api/places/:placeId/vendor", async (req, res) => {
  * body: { userId, review, rating }
  * Add review and update place rating.
  */
-app.post("/api/places/:placeId/reviews", async (req, res) => {
+app.post("/api/places/:placeId/reviews", requireUserAuth, async (req, res) => {
   try {
     const { placeId } = req.params;
-    const { userId, review, rating } = req.body || {};
-    if (!userId || !review || !rating) {
+    const userId = req.userAuth.userId;
+    const { review, rating } = req.body || {};
+    if (!review || !rating) {
       return res
         .status(400)
-        .json({ error: "userId, review, and rating are required" });
+        .json({ error: "review and rating are required" });
     }
     const insertPayload = {
       user_id: userId,
@@ -1065,10 +1212,10 @@ app.post("/api/places/:placeId/reviews", async (req, res) => {
  * GET /api/favorites?userId=...
  * Fetch favorite place IDs and places (full place rows include booking preference columns).
  */
-app.get("/api/favorites", async (req, res) => {
+app.get("/api/favorites", requireUserAuth, async (req, res) => {
   try {
-    const { userId, country } = req.query;
-    if (!userId) return res.status(400).json({ error: "userId is required" });
+    const userId = req.userAuth.userId;
+    const { country } = req.query;
     const { data: userPlaces, error: upError } = await supabaseAdmin
       .from("user_places")
       .select("fav_place_id")
@@ -1093,11 +1240,12 @@ app.get("/api/favorites", async (req, res) => {
  * POST /api/favorites
  * body: { userId, placeId }
  */
-app.post("/api/favorites", async (req, res) => {
+app.post("/api/favorites", requireUserAuth, async (req, res) => {
   try {
-    const { userId, placeId } = req.body || {};
-    if (!userId || !placeId) {
-      return res.status(400).json({ error: "userId and placeId are required" });
+    const userId = req.userAuth.userId;
+    const { placeId } = req.body || {};
+    if (!placeId) {
+      return res.status(400).json({ error: "placeId is required" });
     }
     const { error } = await supabaseAdmin
       .from("user_places")
@@ -1119,11 +1267,12 @@ app.post("/api/favorites", async (req, res) => {
  * DELETE /api/favorites
  * body: { userId, placeId }
  */
-app.delete("/api/favorites", async (req, res) => {
+app.delete("/api/favorites", requireUserAuth, async (req, res) => {
   try {
-    const { userId, placeId } = req.body || req.query;
-    if (!userId || !placeId) {
-      return res.status(400).json({ error: "userId and placeId are required" });
+    const userId = req.userAuth.userId;
+    const { placeId } = req.body || req.query || {};
+    if (!placeId) {
+      return res.status(400).json({ error: "placeId is required" });
     }
     const { error } = await supabaseAdmin
       .from("user_places")
@@ -1143,10 +1292,11 @@ app.delete("/api/favorites", async (req, res) => {
 /**
  * GET /api/favorites/check?userId=...&placeId=...
  */
-app.get("/api/favorites/check", async (req, res) => {
+app.get("/api/favorites/check", requireUserAuth, async (req, res) => {
   try {
-    const { userId, placeId } = req.query;
-    if (!userId || !placeId) return res.json({ favorited: false });
+    const userId = req.userAuth.userId;
+    const { placeId } = req.query;
+    if (!placeId) return res.json({ favorited: false });
     const { data, error } = await supabaseAdmin
       .from("user_places")
       .select("fav_place_id")
@@ -1165,10 +1315,9 @@ app.get("/api/favorites/check", async (req, res) => {
  * GET /api/bookings?userId=...
  * Fetch user bookings with place details.
  */
-app.get("/api/bookings", async (req, res) => {
+app.get("/api/bookings", requireUserAuth, async (req, res) => {
   try {
-    const { userId } = req.query;
-    if (!userId) return res.status(400).json({ error: "userId is required" });
+    const userId = req.userAuth.userId;
     const { data: bookingsWithPlaces, error: joinError } = await supabaseAdmin
       .from("bookings")
       .select(
@@ -1312,21 +1461,26 @@ app.get("/api/bookings", async (req, res) => {
   }
 });
 
-// Auth helpers (match userapp utils/auth.js)
-const SALT_ROUNDS = 10000;
+// Auth helpers — bcrypt for new users, backward-compat with legacy SHA256 (salt:hash format)
+const USER_BCRYPT_ROUNDS = 12;
 const sha256 = (text) => crypto.createHash("sha256").update(text).digest("hex");
-const generateSalt = () => crypto.randomBytes(16).toString("hex");
+
+const isLegacyUserHash = (storedHash) =>
+  storedHash && storedHash.includes(":") && !storedHash.startsWith("$2");
+
 const hashPassword = async (password) => {
-  const salt = generateSalt();
-  let hash = password + salt;
-  for (let i = 0; i < SALT_ROUNDS; i++) hash = sha256(hash);
-  return `${salt}:${hash}`;
+  return bcrypt.hash(password, USER_BCRYPT_ROUNDS);
 };
+
 const verifyPassword = async (password, storedHash) => {
-  if (!storedHash || !storedHash.includes(":")) return false;
+  if (!storedHash) return false;
+  if (storedHash.startsWith("$2")) {
+    return bcrypt.compare(password, storedHash);
+  }
+  if (!storedHash.includes(":")) return false;
   const [salt, hash] = storedHash.split(":");
   let h = password + salt;
-  for (let i = 0; i < SALT_ROUNDS; i++) h = sha256(h);
+  for (let i = 0; i < 10000; i++) h = sha256(h);
   return h === hash;
 };
 
@@ -1334,7 +1488,19 @@ const verifyPassword = async (password, storedHash) => {
  * POST /api/auth/register
  * body: { firstName, lastName, phoneNumber, email, password, address, city, state, country, postalCode }
  */
-app.post("/api/auth/register", async (req, res) => {
+app.post("/api/auth/register", authLimiter, [
+  v.email,
+  v.password,
+  v.shortStr("firstName", "First name"),
+  v.shortStr("lastName", "Last name"),
+  v.phone("phoneNumber", "Phone number"),
+  v.medStr("address", "Address"),
+  v.shortStr("city", "City"),
+  v.shortStr("state", "State"),
+  v.shortStr("country", "Country"),
+  v.postalCode("postalCode"),
+  handleValidationErrors,
+], async (req, res) => {
   try {
     const body = req.body || {};
     const {
@@ -1362,6 +1528,23 @@ app.post("/api/auth/register", async (req, res) => {
         .status(400)
         .json({ error: "User with this email already exists" });
     }
+
+    // Create Supabase Auth user so user gets a real JWT for RLS
+    const { data: authData, error: authErr } =
+      await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      });
+    if (authErr) {
+      console.error("[Auth] Failed to create Supabase Auth user:", authErr?.message);
+      if (authErr.message?.includes("already been registered")) {
+        return res.status(400).json({ error: "User with this email already exists" });
+      }
+      throw authErr;
+    }
+    const authUserId = authData.user.id;
+
     const hashedPassword = await hashPassword(password);
     const userData = {
       first_name: firstName || "",
@@ -1374,6 +1557,7 @@ app.post("/api/auth/register", async (req, res) => {
       state: state || "",
       country: country || "",
       postal_code: postalCode || "",
+      auth_user_id: authUserId,
       created_at: new Date().toISOString(),
     };
     const { data: newUser, error } = await supabaseAdmin
@@ -1411,7 +1595,11 @@ app.post("/api/auth/register", async (req, res) => {
  * POST /api/auth/login
  * body: { email, password }
  */
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/auth/login", authLimiter, [
+  v.email,
+  body("password").notEmpty().withMessage("Password is required").isLength({ max: MAX_MEDIUM }),
+  handleValidationErrors,
+], async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) {
@@ -1432,6 +1620,67 @@ app.post("/api/auth/login", async (req, res) => {
     if (!valid) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
+
+    // Lazy rehash: upgrade legacy SHA256 hash to bcrypt on login
+    if (isLegacyUserHash(user.password_hash)) {
+      try {
+        const bcryptHash = await bcrypt.hash(password, USER_BCRYPT_ROUNDS);
+        await supabaseAdmin
+          .from("users")
+          .update({ password_hash: bcryptHash })
+          .eq("id", user.id);
+        console.log("[Auth] Rehashed user password to bcrypt:", user.id);
+      } catch (rehashErr) {
+        console.warn("[Auth] User bcrypt rehash failed (non-fatal):", rehashErr?.message);
+      }
+    }
+
+    // Lazy migration: create Supabase Auth account if user doesn't have one
+    if (!user.auth_user_id) {
+      try {
+        let authUserId = null;
+
+        const { data: authData, error: authErr } =
+          await supabaseAdmin.auth.admin.createUser({
+            email: user.email,
+            password,
+            email_confirm: true,
+          });
+
+        if (!authErr && authData?.user) {
+          authUserId = authData.user.id;
+        } else if (authErr?.message?.includes("already been registered")) {
+          // Auth user exists from a previous attempt — look it up by email
+          const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+          const existingAuthUser = listData?.users?.find(
+            (u) => u.email?.toLowerCase() === user.email.toLowerCase()
+          );
+          if (existingAuthUser) {
+            authUserId = existingAuthUser.id;
+            // Also sync the password in case it changed
+            await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, { password });
+          }
+        } else if (authErr) {
+          console.warn("[Auth] User Supabase Auth migration failed (non-fatal):", authErr?.message);
+        }
+
+        if (authUserId) {
+          const { error: updateErr } = await supabaseAdmin
+            .from("users")
+            .update({ auth_user_id: authUserId })
+            .eq("id", user.id);
+          if (updateErr) {
+            console.warn("[Auth] Failed to set auth_user_id on users row (non-fatal):", updateErr.message);
+          } else {
+            user.auth_user_id = authUserId;
+            console.log("[Auth] Lazy-migrated user to Supabase Auth:", user.id);
+          }
+        }
+      } catch (migrationErr) {
+        console.warn("[Auth] User auth migration error (non-fatal):", migrationErr?.message);
+      }
+    }
+
     const formatted = {
       id: user.id,
       name: `${user.first_name} ${user.last_name}`,
@@ -1459,11 +1708,20 @@ app.post("/api/auth/login", async (req, res) => {
  * PATCH /api/users/:userId
  * body: { firstName, lastName, phoneNumber, email, address, city, state, country, postalCode }
  */
-app.patch("/api/users/:userId", async (req, res) => {
+app.patch("/api/users/profile", requireUserAuth, [
+  v.shortStr("firstName", "First name"),
+  v.shortStr("lastName", "Last name"),
+  v.phone("phoneNumber", "Phone number"),
+  v.medStr("address", "Address"),
+  v.shortStr("city", "City"),
+  v.shortStr("state", "State"),
+  v.shortStr("country", "Country"),
+  v.postalCode("postalCode"),
+  handleValidationErrors,
+], async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.userAuth.userId;
     const body = req.body || {};
-    if (!userId) return res.status(400).json({ error: "userId is required" });
     const patch = {
       updated_at: new Date().toISOString(),
     };
@@ -1498,18 +1756,22 @@ app.patch("/api/users/:userId", async (req, res) => {
  * PATCH /api/users/:userId/password
  * body: { currentPassword, newPassword }
  */
-app.patch("/api/users/:userId/password", async (req, res) => {
+app.patch("/api/users/password", requireUserAuth, [
+  v.currentPassword,
+  v.newPassword,
+  handleValidationErrors,
+], async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.userAuth.userId;
     const { currentPassword, newPassword } = req.body || {};
-    if (!userId || !currentPassword || !newPassword) {
+    if (!currentPassword || !newPassword) {
       return res
         .status(400)
         .json({ error: "currentPassword and newPassword are required" });
     }
     const { data: dbUser, error: fetchError } = await supabaseAdmin
       .from("users")
-      .select("password_hash")
+      .select("password_hash, auth_user_id")
       .eq("id", userId)
       .single();
     if (fetchError || !dbUser) {
@@ -1528,6 +1790,18 @@ app.patch("/api/users/:userId/password", async (req, res) => {
       })
       .eq("id", userId);
     if (updateError) throw updateError;
+
+    // Sync to Supabase Auth so the JWT password stays in sync
+    if (dbUser.auth_user_id) {
+      try {
+        await supabaseAdmin.auth.admin.updateUserById(dbUser.auth_user_id, {
+          password: newPassword,
+        });
+      } catch (syncErr) {
+        console.warn("[Auth] User password sync to Supabase Auth failed (non-fatal):", syncErr?.message);
+      }
+    }
+
     return res.json({ success: true });
   } catch (err) {
     console.error("api/users/password error:", err);
@@ -1539,7 +1813,41 @@ app.patch("/api/users/:userId/password", async (req, res) => {
 
 // ---------- Vendor API Routes ----------
 
-// Vendor auth: different hashing (SHA256 + salt, format "hash:salt")
+const BCRYPT_ROUNDS = 12;
+
+// Legacy SHA256 hash verification (for existing vendors before bcrypt migration)
+const legacyVendorHashPassword = async (password, salt) => {
+  let h = password + salt;
+  for (let i = 0; i < 10000; i++) {
+    h = crypto.createHash("sha256").update(h).digest("hex");
+  }
+  return h;
+};
+
+const isLegacyHash = (storedHash) =>
+  storedHash && storedHash.includes(":") && !storedHash.startsWith("$2");
+
+const isBcryptHash = (storedHash) =>
+  storedHash && storedHash.startsWith("$2");
+
+/**
+ * Verify vendor password — supports both legacy (hash:salt) and bcrypt ($2b$...).
+ * Returns true if password matches.
+ */
+const vendorVerifyPassword = async (password, storedHash) => {
+  if (!storedHash) return false;
+  if (isBcryptHash(storedHash)) {
+    return bcrypt.compare(password, storedHash);
+  }
+  if (isLegacyHash(storedHash)) {
+    const [hashPart, salt] = storedHash.split(":");
+    const computed = await legacyVendorHashPassword(password, salt);
+    return computed === hashPart;
+  }
+  return false;
+};
+
+// Kept for registration (still stores legacy hash alongside bcrypt for rollback safety)
 const vendorHashPassword = async (password, salt) => {
   let h = password + salt;
   for (let i = 0; i < 10000; i++) {
@@ -1547,20 +1855,56 @@ const vendorHashPassword = async (password, salt) => {
   }
   return h;
 };
-const vendorVerifyPassword = async (password, storedHash) => {
-  if (!storedHash || !storedHash.includes(":")) return false;
-  const [hashPart, salt] = storedHash.split(":");
-  const computed = await vendorHashPassword(password, salt);
-  return computed === hashPart;
-};
 
 /**
  * POST /api/vendor/auth/register
- * Creates place + vendor. Body: full registration form.
+ * Creates Supabase Auth user + place + vendor (with auth_user_id).
+ * Body: full registration form.
  */
-app.post("/api/vendor/auth/register", async (req, res) => {
+app.post("/api/vendor/auth/register", authLimiter, [
+  v.email,
+  v.password,
+  v.medStr("businessName", "Business name"),
+  v.medStr("address", "Address"),
+  v.shortStr("country", "Country"),
+  v.shortStr("city", "City"),
+  v.shortStr("state", "State"),
+  v.postalCode("postalCode"),
+  v.phone("businessPhoneNumber", "Business phone"),
+  v.shortStr("businessCategory", "Category"),
+  v.shortStr("businessSubCategory", "Subcategory"),
+  v.medStr("vendorFullName", "Full name"),
+  v.phone("vendorPhoneNumber", "Vendor phone"),
+  v.medStr("vendorAddress", "Vendor address"),
+  v.shortStr("vendorCity", "Vendor city"),
+  v.shortStr("vendorState", "Vendor state"),
+  v.shortStr("vendorCountry", "Vendor country"),
+  v.postalCode("vendorPostalCode"),
+  handleValidationErrors,
+], async (req, res) => {
   try {
     const body = req.body || {};
+    const email = (body.email || "").toLowerCase().trim();
+
+    // 1) Create Supabase Auth user (so vendor gets a real JWT for RLS)
+    const { data: authData, error: authErr } =
+      await supabaseAdmin.auth.admin.createUser({
+        email,
+        password: body.password,
+        email_confirm: true,
+      });
+    if (authErr) {
+      if (authErr.message?.includes("already been registered")) {
+        return res.status(400).json({
+          error:
+            "An account with this email already exists. Please sign in instead.",
+        });
+      }
+      throw authErr;
+    }
+    const authUserId = authData.user.id;
+
+    // 2) Create place row
     const placeData = {
       name: body.businessName,
       address: body.address,
@@ -1579,15 +1923,14 @@ app.post("/api/vendor/auth/register", async (req, res) => {
       .single();
     if (placeErr) throw placeErr;
 
-    const salt = crypto.randomBytes(16).toString("hex");
-    const hashPart = await vendorHashPassword(body.password, salt);
-    const passwordHash = `${hashPart}:${salt}`;
+    // 3) Create vendor row with auth_user_id linked to Supabase Auth
+    const passwordHash = await bcrypt.hash(body.password, BCRYPT_ROUNDS);
 
     const vendorData = {
       business_name: body.businessName,
       vendor_full_name: body.vendorFullName,
       vendor_phone_number: body.vendorPhoneNumber,
-      vendor_email: (body.email || "").toLowerCase().trim(),
+      vendor_email: email,
       password_hash: passwordHash,
       vendor_address: body.vendorAddress,
       vendor_city: body.vendorCity,
@@ -1595,12 +1938,13 @@ app.post("/api/vendor/auth/register", async (req, res) => {
       vendor_country: body.vendorCountry,
       vendor_postal_code: body.vendorPostalCode,
       place_id: place.id,
+      auth_user_id: authUserId,
     };
     const { data: vendor, error: vendorErr } = await supabaseAdmin
       .from("vendors")
       .insert([vendorData])
       .select(
-        "id, business_name, vendor_full_name, vendor_phone_number, vendor_email, vendor_address, vendor_city, vendor_state, vendor_country, vendor_postal_code, place_id, created_at, updated_at",
+        "id, business_name, vendor_full_name, vendor_phone_number, vendor_email, vendor_address, vendor_city, vendor_state, vendor_country, vendor_postal_code, place_id, auth_user_id, created_at, updated_at",
       )
       .single();
     if (vendorErr) {
@@ -1613,7 +1957,7 @@ app.post("/api/vendor/auth/register", async (req, res) => {
       throw vendorErr;
     }
 
-    // Create Razorpay contact for vendor (non-blocking)
+    // 4) Create Razorpay contact for vendor (non-blocking)
     const rawName = (vendor.vendor_full_name || "").trim();
     const razorpayPayload = {
       name: rawName.length >= 3 ? rawName : "Vendor",
@@ -1688,8 +2032,14 @@ app.post("/api/vendor/auth/register", async (req, res) => {
 /**
  * POST /api/vendor/auth/login
  * Body: { email, password }
+ * Verifies password (bcrypt or legacy), lazily migrates to Supabase Auth
+ * and rehashes legacy passwords to bcrypt.
  */
-app.post("/api/vendor/auth/login", async (req, res) => {
+app.post("/api/vendor/auth/login", authLimiter, [
+  v.email,
+  body("password").notEmpty().withMessage("Password is required").isLength({ max: MAX_MEDIUM }),
+  handleValidationErrors,
+], async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) {
@@ -1698,7 +2048,7 @@ app.post("/api/vendor/auth/login", async (req, res) => {
     const { data: vendor, error } = await supabaseAdmin
       .from("vendors")
       .select(
-        "id, business_name, vendor_full_name, vendor_phone_number, vendor_email, password_hash, vendor_address, vendor_city, vendor_state, vendor_country, vendor_postal_code, place_id, created_at, updated_at",
+        "id, business_name, vendor_full_name, vendor_phone_number, vendor_email, password_hash, vendor_address, vendor_city, vendor_state, vendor_country, vendor_postal_code, place_id, auth_user_id, created_at, updated_at",
       )
       .eq("vendor_email", (email || "").toLowerCase().trim())
       .single();
@@ -1709,6 +2059,62 @@ app.post("/api/vendor/auth/login", async (req, res) => {
     if (!valid) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
+
+    // Lazy rehash: upgrade legacy SHA256 hash to bcrypt
+    if (isLegacyHash(vendor.password_hash)) {
+      try {
+        const bcryptHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+        await supabaseAdmin
+          .from("vendors")
+          .update({ password_hash: bcryptHash })
+          .eq("id", vendor.id);
+        console.log("[Auth] Rehashed vendor password to bcrypt:", vendor.id);
+      } catch (rehashErr) {
+        console.warn("[Auth] Bcrypt rehash failed (non-fatal):", rehashErr?.message);
+      }
+    }
+
+    // Lazy migration: create Supabase Auth account if vendor doesn't have one
+    if (!vendor.auth_user_id) {
+      try {
+        let authUserId = null;
+
+        const { data: authData, error: authErr } =
+          await supabaseAdmin.auth.admin.createUser({
+            email: vendor.vendor_email,
+            password,
+            email_confirm: true,
+          });
+
+        if (!authErr && authData?.user?.id) {
+          authUserId = authData.user.id;
+        } else if (authErr?.message?.includes("already been registered")) {
+          // Auth user exists from a previous attempt — look it up by email
+          const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+          const existingAuthUser = listData?.users?.find(
+            (u) => u.email?.toLowerCase() === vendor.vendor_email.toLowerCase()
+          );
+          if (existingAuthUser) {
+            authUserId = existingAuthUser.id;
+            await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, { password });
+          }
+        } else if (authErr) {
+          console.warn("[Auth] Vendor lazy migration failed (non-fatal):", authErr.message);
+        }
+
+        if (authUserId) {
+          await supabaseAdmin
+            .from("vendors")
+            .update({ auth_user_id: authUserId })
+            .eq("id", vendor.id);
+          vendor.auth_user_id = authUserId;
+          console.log("[Auth] Lazy-migrated vendor to Supabase Auth:", vendor.id);
+        }
+      } catch (migrationErr) {
+        console.warn("[Auth] Vendor lazy migration error (non-fatal):", migrationErr?.message);
+      }
+    }
+
     const { password_hash: _, ...safe } = vendor;
     return res.json({ success: true, user: safe });
   } catch (err) {
@@ -1722,7 +2128,11 @@ app.post("/api/vendor/auth/login", async (req, res) => {
  * Body: { email, password }
  * Uses Supabase Auth signInWithPassword.
  */
-app.post("/api/admin/auth/login", async (req, res) => {
+app.post("/api/admin/auth/login", authLimiter, [
+  v.email,
+  body("password").notEmpty().withMessage("Password is required").isLength({ max: MAX_MEDIUM }),
+  handleValidationErrors,
+], async (req, res) => {
   try {
     const { email, password } = req.body || {};
     console.log(
@@ -1894,13 +2304,13 @@ app.get("/api/admin/dashboard/sales", async (req, res) => {
 });
 
 /**
- * GET /api/vendor/bookings?placeId=...
- * Returns bookings with user details.
+ * GET /api/vendor/bookings
+ * Returns bookings with user details. placeId from JWT.
  */
-app.get("/api/vendor/bookings", async (req, res) => {
+app.get("/api/vendor/bookings", requireVendorAuth, async (req, res) => {
   try {
-    const { placeId } = req.query;
-    if (!placeId) return res.status(400).json({ error: "placeId required" });
+    const placeId = req.vendorAuth.placeId;
+    if (!placeId) return res.status(400).json({ error: "No place linked to vendor" });
     const { data: bookings, error } = await supabaseAdmin
       .from("bookings")
       .select("*")
@@ -1942,12 +2352,12 @@ app.get("/api/vendor/bookings", async (req, res) => {
 });
 
 /**
- * GET /api/vendor/reviews?placeId=...
+ * GET /api/vendor/reviews
  */
-app.get("/api/vendor/reviews", async (req, res) => {
+app.get("/api/vendor/reviews", requireVendorAuth, async (req, res) => {
   try {
-    const { placeId } = req.query;
-    if (!placeId) return res.status(400).json({ error: "placeId required" });
+    const placeId = req.vendorAuth.placeId;
+    if (!placeId) return res.status(400).json({ error: "No place linked to vendor" });
     const { data: reviews, error } = await supabaseAdmin
       .from("reviews")
       .select("user_id, place_id, review, rating")
@@ -1984,12 +2394,12 @@ app.get("/api/vendor/reviews", async (req, res) => {
 });
 
 /**
- * GET /api/vendor/place?placeId=...
+ * GET /api/vendor/place
  */
-app.get("/api/vendor/place", async (req, res) => {
+app.get("/api/vendor/place", requireVendorAuth, async (req, res) => {
   try {
-    const { placeId } = req.query;
-    if (!placeId) return res.status(400).json({ error: "placeId required" });
+    const placeId = req.vendorAuth.placeId;
+    if (!placeId) return res.status(400).json({ error: "No place linked to vendor" });
     const { data, error } = await supabaseAdmin
       .from("places")
       .select("*")
@@ -2007,12 +2417,29 @@ app.get("/api/vendor/place", async (req, res) => {
 
 /**
  * PATCH /api/vendor/place
- * Body: { placeId, ...updateFields }
+ * Body: { ...updateFields } — placeId from JWT
  */
-app.patch("/api/vendor/place", async (req, res) => {
+app.patch("/api/vendor/place", requireVendorAuth, [
+  v.longStr("description", "Description"),
+  v.url("website", "Website"),
+  v.url("location_map_link", "Map link"),
+  v.price("avg_price"),
+  v.bool("allow_overlapping_bookings"),
+  v.bool("allow_multiple_hours_booking"),
+  v.bool("charge_per_guest"),
+  v.medStr("name", "Place name"),
+  v.medStr("address", "Address"),
+  v.shortStr("city", "City"),
+  v.shortStr("state", "State"),
+  v.shortStr("country", "Country"),
+  v.postalCode("postal_code"),
+  v.phone("phone_number", "Phone number"),
+  handleValidationErrors,
+], async (req, res) => {
   try {
-    const { placeId, ...patch } = req.body || {};
-    if (!placeId) return res.status(400).json({ error: "placeId required" });
+    const placeId = req.vendorAuth.placeId;
+    const { placeId: _clientPlaceId, ...patch } = req.body || {};
+    if (!placeId) return res.status(400).json({ error: "No place linked to vendor" });
     const { error } = await supabaseAdmin
       .from("places")
       .update({ ...patch, updated_at: new Date().toISOString() })
@@ -2028,12 +2455,11 @@ app.patch("/api/vendor/place", async (req, res) => {
 });
 
 /**
- * GET /api/vendor/notifications?vendorId=...
+ * GET /api/vendor/notifications
  */
-app.get("/api/vendor/notifications", async (req, res) => {
+app.get("/api/vendor/notifications", requireVendorAuth, async (req, res) => {
   try {
-    const { vendorId } = req.query;
-    if (!vendorId) return res.status(400).json({ error: "vendorId required" });
+    const vendorId = req.vendorAuth.vendorId;
     const { data, error } = await supabaseAdmin
       .from("vendor_notifications")
       .select(
@@ -2055,12 +2481,10 @@ app.get("/api/vendor/notifications", async (req, res) => {
 
 /**
  * POST /api/vendor/notifications/mark-read
- * Body: { vendorId }
  */
-app.post("/api/vendor/notifications/mark-read", async (req, res) => {
+app.post("/api/vendor/notifications/mark-read", requireVendorAuth, async (req, res) => {
   try {
-    const { vendorId } = req.body || {};
-    if (!vendorId) return res.status(400).json({ error: "vendorId required" });
+    const vendorId = req.vendorAuth.vendorId;
     const { error } = await supabaseAdmin
       .from("vendor_notifications")
       .update({ is_read: true })
@@ -2077,12 +2501,12 @@ app.post("/api/vendor/notifications/mark-read", async (req, res) => {
 });
 
 /**
- * GET /api/vendor/gallery?placeId=...
+ * GET /api/vendor/gallery
  */
-app.get("/api/vendor/gallery", async (req, res) => {
+app.get("/api/vendor/gallery", requireVendorAuth, async (req, res) => {
   try {
-    const { placeId } = req.query;
-    if (!placeId) return res.status(400).json({ error: "placeId required" });
+    const placeId = req.vendorAuth.placeId;
+    if (!placeId) return res.status(400).json({ error: "No place linked to vendor" });
     const { data, error } = await supabaseAdmin
       .from("gallery_images")
       .select("id, gallery_image_url")
@@ -2100,12 +2524,18 @@ app.get("/api/vendor/gallery", async (req, res) => {
 
 /**
  * POST /api/vendor/gallery
- * Body: { placeId, gallery_image_url } or { placeId, images: [url, ...] }
+ * Body: { gallery_image_url } or { images: [url, ...] } — placeId from JWT
  */
-app.post("/api/vendor/gallery", async (req, res) => {
+app.post("/api/vendor/gallery", requireVendorAuth, [
+  v.url("gallery_image_url", "Gallery image URL"),
+  body("images").optional().isArray({ max: 20 }).withMessage("images must be an array (max 20)"),
+  body("images.*").optional().isURL().withMessage("Each image must be a valid URL"),
+  handleValidationErrors,
+], async (req, res) => {
   try {
-    const { placeId, gallery_image_url, images } = req.body || {};
-    if (!placeId) return res.status(400).json({ error: "placeId required" });
+    const placeId = req.vendorAuth.placeId;
+    if (!placeId) return res.status(400).json({ error: "No place linked to vendor" });
+    const { gallery_image_url, images } = req.body || {};
     const toInsert = gallery_image_url
       ? [{ place_id: placeId, gallery_image_url }]
       : (images || []).map((url) => ({
@@ -2131,7 +2561,11 @@ app.post("/api/vendor/gallery", async (req, res) => {
  * DELETE /api/vendor/gallery
  * Body: { ids: string[] }
  */
-app.delete("/api/vendor/gallery", async (req, res) => {
+app.delete("/api/vendor/gallery", requireVendorAuth, [
+  body("ids").isArray({ min: 1, max: 50 }).withMessage("ids must be a non-empty array (max 50)"),
+  body("ids.*").isUUID().withMessage("Each id must be a valid UUID"),
+  handleValidationErrors,
+], async (req, res) => {
   try {
     const { ids } = req.body || {};
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
@@ -2152,12 +2586,11 @@ app.delete("/api/vendor/gallery", async (req, res) => {
 });
 
 /**
- * GET /api/vendor/profile?vendorId=...
+ * GET /api/vendor/profile
  */
-app.get("/api/vendor/profile", async (req, res) => {
+app.get("/api/vendor/profile", requireVendorAuth, async (req, res) => {
   try {
-    const { vendorId } = req.query;
-    if (!vendorId) return res.status(400).json({ error: "vendorId required" });
+    const vendorId = req.vendorAuth.vendorId;
     const { data, error } = await supabaseAdmin
       .from("vendors")
       .select(
@@ -2177,26 +2610,26 @@ app.get("/api/vendor/profile", async (req, res) => {
 
 /**
  * PATCH /api/vendor/profile
- * Body: { vendorId, ...updateFields } - vendorId can be vendor UUID or razorpay_contact_ref (cont_xxx)
+ * Body: { ...updateFields } — vendorId from JWT
  * After saving bank details (upi_id), creates Razorpay fund account for payouts.
  */
-app.patch("/api/vendor/profile", async (req, res) => {
+app.patch("/api/vendor/profile", requireVendorAuth, [
+  v.medStr("vendor_full_name", "Full name"),
+  v.phone("vendor_phone_number", "Phone number"),
+  v.medStr("vendor_address", "Address"),
+  v.shortStr("vendor_city", "City"),
+  v.shortStr("vendor_state", "State"),
+  v.shortStr("vendor_country", "Country"),
+  v.postalCode("vendor_postal_code"),
+  v.medStr("account_holder_name", "Account holder name"),
+  v.medStr("account_number", "Account number"),
+  v.shortStr("ifsc_code", "IFSC code"),
+  v.medStr("upi_id", "UPI ID"),
+  handleValidationErrors,
+], async (req, res) => {
   try {
-    let { vendorId, ...patch } = req.body || {};
-    if (!vendorId) return res.status(400).json({ error: "vendorId required" });
-    // If vendorId looks like Razorpay contact ref (cont_xxx), look up vendor by that
-    if (String(vendorId).startsWith("cont_")) {
-      const { data: v } = await supabaseAdmin
-        .from("vendors")
-        .select("id")
-        .eq("razorpay_contact_ref", vendorId)
-        .single();
-      if (!v?.id)
-        return res
-          .status(404)
-          .json({ error: "Vendor not found for this contact ref" });
-      vendorId = v.id;
-    }
+    const vendorId = req.vendorAuth.vendorId;
+    const { vendorId: _clientVendorId, ...patch } = req.body || {};
     const { error } = await supabaseAdmin
       .from("vendors")
       .update({ ...patch, updated_at: new Date().toISOString() })
@@ -2274,18 +2707,24 @@ app.patch("/api/vendor/profile", async (req, res) => {
 /**
  * PATCH /api/vendor/password
  * Body: { vendorId, currentPassword, newPassword }
+ * Updates custom hash AND syncs to Supabase Auth.
  */
-app.patch("/api/vendor/password", async (req, res) => {
+app.patch("/api/vendor/password", requireVendorAuth, [
+  v.currentPassword,
+  v.newPassword,
+  handleValidationErrors,
+], async (req, res) => {
   try {
-    const { vendorId, currentPassword, newPassword } = req.body || {};
-    if (!vendorId || !currentPassword || !newPassword) {
+    const vendorId = req.vendorAuth.vendorId;
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword) {
       return res
         .status(400)
         .json({ error: "currentPassword and newPassword required" });
     }
     const { data: vendor, error: fetchErr } = await supabaseAdmin
       .from("vendors")
-      .select("password_hash")
+      .select("password_hash, auth_user_id")
       .eq("id", vendorId)
       .single();
     if (fetchErr || !vendor) {
@@ -2298,9 +2737,7 @@ app.patch("/api/vendor/password", async (req, res) => {
     if (!valid) {
       return res.status(400).json({ error: "Current password is incorrect" });
     }
-    const salt = crypto.randomBytes(16).toString("hex");
-    const hashPart = await vendorHashPassword(newPassword, salt);
-    const passwordHash = `${hashPart}:${salt}`;
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
     const { error: updateErr } = await supabaseAdmin
       .from("vendors")
       .update({
@@ -2309,6 +2746,18 @@ app.patch("/api/vendor/password", async (req, res) => {
       })
       .eq("id", vendorId);
     if (updateErr) throw updateErr;
+
+    // Sync to Supabase Auth so the JWT password stays in sync
+    if (vendor.auth_user_id) {
+      try {
+        await supabaseAdmin.auth.admin.updateUserById(vendor.auth_user_id, {
+          password: newPassword,
+        });
+      } catch (authErr) {
+        console.warn("[Auth] Password sync to Supabase Auth failed (non-fatal):", authErr?.message);
+      }
+    }
+
     return res.json({ success: true });
   } catch (err) {
     console.error("api/vendor/password error:", err);
@@ -2320,12 +2769,15 @@ app.patch("/api/vendor/password", async (req, res) => {
 
 /**
  * PATCH /api/vendor/push-token
- * Body: { vendorId, push_token }
+ * Body: { push_token }
  */
-app.patch("/api/vendor/push-token", async (req, res) => {
+app.patch("/api/vendor/push-token", requireVendorAuth, [
+  v.medStr("push_token", "Push token"),
+  handleValidationErrors,
+], async (req, res) => {
   try {
-    const { vendorId, push_token } = req.body || {};
-    if (!vendorId) return res.status(400).json({ error: "vendorId required" });
+    const vendorId = req.vendorAuth.vendorId;
+    const { push_token } = req.body || {};
     const { error } = await supabaseAdmin
       .from("vendors")
       .update({
@@ -2344,13 +2796,12 @@ app.patch("/api/vendor/push-token", async (req, res) => {
 });
 
 /**
- * GET /api/vendor/onboarding-status?vendorId=...
+ * GET /api/vendor/onboarding-status
  * Returns { placeDetailsComplete, bankDetailsComplete }
  */
-app.get("/api/vendor/onboarding-status", async (req, res) => {
+app.get("/api/vendor/onboarding-status", requireVendorAuth, async (req, res) => {
   try {
-    const { vendorId } = req.query;
-    if (!vendorId) return res.status(400).json({ error: "vendorId required" });
+    const vendorId = req.vendorAuth.vendorId;
     const { data: vendor } = await supabaseAdmin
       .from("vendors")
       .select(
@@ -2408,11 +2859,15 @@ app.get("/api/vendor/onboarding-status", async (req, res) => {
 
 // Storage upload: backend receives base64 and uploads to Supabase Storage
 const BUCKET = "places_images";
-app.post("/api/vendor/upload-banner", async (req, res) => {
+app.post("/api/vendor/upload-banner", requireVendorAuth, [
+  v.base64("base64"),
+  handleValidationErrors,
+], async (req, res) => {
   try {
-    const { placeId, base64 } = req.body || {};
+    const placeId = req.vendorAuth.placeId;
+    const { base64 } = req.body || {};
     if (!placeId || !base64) {
-      return res.status(400).json({ error: "placeId and base64 required" });
+      return res.status(400).json({ error: "base64 required" });
     }
     const buf = Buffer.from(base64, "base64");
     const fileName = `${placeId}/banner-${placeId}-${Date.now()}.jpg`;
@@ -2439,13 +2894,18 @@ app.post("/api/vendor/upload-banner", async (req, res) => {
   }
 });
 
-app.post("/api/vendor/upload-gallery", async (req, res) => {
+app.post("/api/vendor/upload-gallery", requireVendorAuth, [
+  body("images").isArray({ min: 1, max: 10 }).withMessage("images must be an array (1-10 items)"),
+  body("images.*").notEmpty().isLength({ max: 10 * 1024 * 1024 }).withMessage("Each image too large"),
+  handleValidationErrors,
+], async (req, res) => {
   try {
-    const { placeId, images } = req.body || {};
+    const placeId = req.vendorAuth.placeId;
+    const { images } = req.body || {};
     if (!placeId || !images || !Array.isArray(images) || images.length === 0) {
       return res
         .status(400)
-        .json({ error: "placeId and images (base64 array) required" });
+        .json({ error: "images (base64 array) required" });
     }
     const urls = [];
     for (const base64 of images) {
@@ -2477,7 +2937,11 @@ app.post("/api/vendor/upload-gallery", async (req, res) => {
  * POST /api/vendor/storage/remove
  * Body: { paths: string[] } - storage paths to remove
  */
-app.post("/api/vendor/storage/remove", async (req, res) => {
+app.post("/api/vendor/storage/remove", requireVendorAuth, [
+  body("paths").isArray({ min: 1, max: 50 }).withMessage("paths must be a non-empty array (max 50)"),
+  body("paths.*").isString().isLength({ max: MAX_URL }).withMessage("Each path must be a string"),
+  handleValidationErrors,
+], async (req, res) => {
   try {
     const { paths } = req.body || {};
     if (!paths || !Array.isArray(paths) || paths.length === 0) {

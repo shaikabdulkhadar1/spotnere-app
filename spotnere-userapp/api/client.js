@@ -1,15 +1,26 @@
 /**
  * API Client
  * All API calls go through the backend server.
+ * Automatically attaches Supabase JWT as Bearer token.
  */
 
 import Constants from "expo-constants";
+import { supabase } from "../config/supabase";
 
 const API_BASE = (
   process.env.EXPO_PUBLIC_API_BASE_URL ||
   Constants.expoConfig?.extra?.apiBaseUrl ||
   "http://localhost:5001"
 ).replace(/\/$/, ""); // trim trailing slash
+
+async function getAccessToken() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token || null;
+  } catch {
+    return null;
+  }
+}
 
 async function request(method, path, body = null, query = null) {
   let url = `${API_BASE}${path}`;
@@ -19,9 +30,14 @@ async function request(method, path, body = null, query = null) {
   }
   const headers = {
     "Content-Type": "application/json",
-    // ngrok free tier requires this to skip browser warning for API requests
     "ngrok-skip-browser-warning": "true",
   };
+
+  const token = await getAccessToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const opts = {
     method,
     headers,
@@ -41,7 +57,7 @@ async function request(method, path, body = null, query = null) {
 }
 
 export const api = {
-  // Places
+  // Places (public — no auth required)
   getPlaces: (params) => request("GET", "/api/places", null, params),
   getPlacesByIds: (placeIds, country) =>
     request("POST", "/api/places/by-ids", { placeIds, country }),
@@ -52,18 +68,18 @@ export const api = {
   addReview: (placeId, payload) =>
     request("POST", `/api/places/${placeId}/reviews`, payload),
 
-  // Favorites
-  getFavorites: (userId, country) =>
-    request("GET", "/api/favorites", null, { userId, country }),
-  addFavorite: (userId, placeId) =>
-    request("POST", "/api/favorites", { userId, placeId }),
-  removeFavorite: (userId, placeId) =>
-    request("DELETE", "/api/favorites", { userId, placeId }),
-  checkFavorite: (userId, placeId) =>
-    request("GET", "/api/favorites/check", null, { userId, placeId }),
+  // Favorites (auth required — userId derived from JWT on backend)
+  getFavorites: (country) =>
+    request("GET", "/api/favorites", null, country ? { country } : undefined),
+  addFavorite: (placeId) =>
+    request("POST", "/api/favorites", { placeId }),
+  removeFavorite: (placeId) =>
+    request("DELETE", "/api/favorites", { placeId }),
+  checkFavorite: (placeId) =>
+    request("GET", "/api/favorites/check", null, { placeId }),
 
-  // Bookings
-  getBookings: (userId) => request("GET", "/api/bookings", null, { userId }),
+  // Bookings (auth required — userId derived from JWT on backend)
+  getBookings: () => request("GET", "/api/bookings"),
 
   // Auth
   register: (formData) =>
@@ -82,9 +98,9 @@ export const api = {
   login: (email, password) =>
     request("POST", "/api/auth/login", { email, password }),
 
-  // Users
-  updateProfile: (userId, formData) =>
-    request("PATCH", `/api/users/${userId}`, {
+  // Users (auth required — userId derived from JWT on backend)
+  updateProfile: (formData) =>
+    request("PATCH", "/api/users/profile", {
       firstName: formData.firstName,
       lastName: formData.lastName,
       phoneNumber: formData.phoneNumber,
@@ -95,8 +111,8 @@ export const api = {
       country: formData.country,
       postalCode: formData.postalCode,
     }),
-  updatePassword: (userId, currentPassword, newPassword) =>
-    request("PATCH", `/api/users/${userId}/password`, {
+  updatePassword: (currentPassword, newPassword) =>
+    request("PATCH", "/api/users/password", {
       currentPassword,
       newPassword,
     }),

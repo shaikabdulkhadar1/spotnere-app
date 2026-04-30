@@ -11,7 +11,7 @@ export default {
     name: "Spotnere",
     owner: "shaikabdulkhadar571",
     slug: "spotnere-mobileapp",
-    version: "1.0.2",
+    version: "1.1.0",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -40,7 +40,7 @@ export default {
     android: {
       package: "com.spotnere.mobileapp",
       usesCleartextTraffic: true,
-      versionCode: 3,
+      versionCode: 11,
       adaptiveIcon: {
         foregroundImage: "./assets/icons/adaptive-icon.png",
         backgroundColor: "#ffffff",

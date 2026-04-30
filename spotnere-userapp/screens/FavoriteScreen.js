@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -15,7 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { api } from "../api/client";
 import PlaceCard from "../components/PlaceCard";
 import SkeletonCard from "../components/SkeletonCard";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { formatListingPrice } from "../utils/placePrice";
 import { getCurrentUser } from "../utils/auth";
@@ -28,6 +28,9 @@ import {
 const { width, height } = Dimensions.get("window");
 
 const FavoriteScreen = ({ userCountry, onPlacePress, onBack }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [favoritePlaces, setFavoritePlaces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -55,7 +58,7 @@ const FavoriteScreen = ({ userCountry, onPlacePress, onBack }) => {
         return;
       }
 
-      const places = await api.getFavorites(user.id, userCountry || undefined);
+      const places = await api.getFavorites(userCountry || undefined);
 
       if (!places || places.length === 0) {
         setFavoritePlaces([]);
@@ -230,7 +233,7 @@ const FavoriteScreen = ({ userCountry, onPlacePress, onBack }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

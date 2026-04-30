@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -9,11 +9,14 @@ import {
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 
 const { width } = Dimensions.get("window");
 
 const BottomNavBar = ({ activeTab, onTabChange }) => {
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const tabs = [
     { id: "home", icon: "home" },
     { id: "favorite", icon: "heart" },
@@ -87,7 +90,10 @@ const BottomNavBar = ({ activeTab, onTabChange }) => {
   }, [activeTab]);
 
   const BlurContainer = Platform.OS === "ios" ? BlurView : View;
-  const blurProps = Platform.OS === "ios" ? { intensity: 80 } : {};
+  const blurProps =
+    Platform.OS === "ios"
+      ? { intensity: 80, tint: isDark ? "dark" : "light" }
+      : {};
 
   return (
     <View style={styles.navBarContainer}>
@@ -163,7 +169,7 @@ const BottomNavBar = ({ activeTab, onTabChange }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   navBarContainer: {
     position: "absolute",
     bottom: Platform.OS === "ios" ? 20 : 10,
@@ -180,7 +186,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: "rgba(202, 211, 167, 0.2)",
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
     shadowRadius: 16,

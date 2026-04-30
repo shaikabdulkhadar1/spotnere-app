@@ -18,7 +18,7 @@ import {
   Animated,
   BackHandler,
 } from "react-native";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useFonts } from "expo-font";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,7 +32,8 @@ import PlaceDetailScreen from "./screens/PlaceDetailScreen";
 import BookingDetailScreen from "./screens/BookingDetailScreen";
 import ProfileScreen from "./screens/ProfileScreen";
 import { BookingsProvider } from "./context/BookingsContext";
-import { colors } from "./constants/colors";
+import { ThemeProvider, useTheme } from "./context/ThemeContext";
+import { colors as staticColors } from "./constants/colors";
 import { fonts } from "./constants/fonts";
 // Error Boundary Styles (defined before ErrorBoundary component)
 const errorBoundaryStyles = StyleSheet.create({
@@ -40,19 +41,19 @@ const errorBoundaryStyles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: colors.background,
+    backgroundColor: staticColors.background,
     padding: 20,
   },
   errorText: {
     fontSize: 16,
-    color: colors.error,
+    color: staticColors.error,
     marginBottom: 16,
     textAlign: "center",
     paddingHorizontal: 20,
     fontFamily: fonts.regular,
   },
   retryButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: staticColors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -101,6 +102,17 @@ class ErrorBoundary extends React.Component {
 const { width, height } = Dimensions.get("window");
 
 export default function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
+  );
+}
+
+function AppContent() {
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   // Load custom fonts
   const [fontsLoaded] = useFonts({
     "Parkinsans-Light": require("./assets/fonts/Parkinsans-Light.ttf"),
@@ -400,7 +412,7 @@ export default function App() {
   if (!fontsLoaded) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color={colors.primary || "#007AFF"} />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -433,7 +445,7 @@ export default function App() {
     <ErrorBoundary>
       <BookingsProvider>
       <View style={styles.container}>
-        <ExpoStatusBar style="light" />
+        <ExpoStatusBar style={isDark ? "light" : "dark"} />
 
         {/* Top Section - Search Bar and Categories - Hidden on detail screens and shown only on Home tab */}
         {!selectedPlaceId && !selectedBooking && activeTab === "home" && (
@@ -445,13 +457,13 @@ export default function App() {
                   <Ionicons
                     name="search"
                     size={20}
-                    color="#717171"
+                    color={colors.textSecondary}
                     style={styles.searchIcon}
                   />
                   <TextInput
                     style={styles.searchBarInput}
                     placeholder="Start typing to search"
-                    placeholderTextColor="#717171"
+                    placeholderTextColor={colors.textSecondary}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                     editable={true}
@@ -476,7 +488,7 @@ export default function App() {
                     }).start();
                   }}
                 >
-                  <Ionicons name="filter-outline" size={20} color="#000" />
+                  <Ionicons name="filter-outline" size={20} color={colors.text} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -523,7 +535,7 @@ export default function App() {
                           <Ionicons
                             name={category.icon}
                             size={category.iconSize}
-                            color="#222"
+                            color={colors.text}
                           />
                         )}
                       </View>
@@ -756,30 +768,30 @@ export default function App() {
                                 nestedScrollEnabled={true}
                                 showsVerticalScrollIndicator={true}
                               >
-                                {categories.map((category) => (
+                                {categories.map((cat) => (
                                   <TouchableOpacity
-                                    key={category.id}
+                                    key={cat.id}
                                     style={[
                                       styles.dropdownOption,
-                                      selectedCategory === category.id &&
+                                      selectedCategory === cat.id &&
                                         styles.dropdownOptionSelected,
                                     ]}
                                     onPress={() => {
-                                      setSelectedCategory(category.id);
-                                      setSelectedSubCategory(""); // Reset sub-category when category changes
+                                      setSelectedCategory(cat.id);
+                                      setSelectedSubCategory("");
                                       setShowCategoryDropdown(false);
                                     }}
                                   >
                                     <Text
                                       style={[
                                         styles.dropdownOptionText,
-                                        selectedCategory === category.id &&
+                                        selectedCategory === cat.id &&
                                           styles.dropdownOptionTextSelected,
                                       ]}
                                     >
-                                      {category.label}
+                                      {cat.label}
                                     </Text>
-                                    {selectedCategory === category.id && (
+                                    {selectedCategory === cat.id && (
                                       <Ionicons
                                         name="checkmark"
                                         size={20}
@@ -1027,7 +1039,7 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -1053,11 +1065,11 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 40, // More rounded, pill-shaped like Airbnb
+    backgroundColor: colors.cardBackground,
+    borderRadius: 40,
     paddingHorizontal: 20,
     paddingVertical: 16,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: {
       width: 0,
       height: 1,
@@ -1066,16 +1078,16 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
     borderWidth: 1,
-    borderColor: "rgba(0, 0, 0, 0.04)",
+    borderColor: colors.border,
   },
   filterButton: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.cardBackground,
     borderRadius: 40,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 16,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: {
       width: 0,
       height: 1,
@@ -1084,7 +1096,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
     borderWidth: 1,
-    borderColor: "rgba(0, 0, 0, 0.04)",
+    borderColor: colors.border,
   },
   searchIcon: {
     marginRight: 12,
@@ -1092,7 +1104,7 @@ const styles = StyleSheet.create({
   searchBarInput: {
     flex: 1,
     fontSize: 16,
-    color: "#222",
+    color: colors.text,
   },
   categoryContainer: {
     paddingBottom: 0,
@@ -1104,10 +1116,10 @@ const styles = StyleSheet.create({
     overflow: "hidden", // Clip any shadows that might appear on top
     // Shadow only at the bottom - iOS
     ...(Platform.OS === "ios" && {
-      shadowColor: "#000",
+      shadowColor: colors.shadow,
       shadowOffset: {
         width: 0,
-        height: 6, // Only downward shadow
+        height: 6,
       },
       shadowOpacity: 0.08,
       shadowRadius: 4,
@@ -1117,7 +1129,7 @@ const styles = StyleSheet.create({
       elevation: 0, // Remove elevation to prevent shadows on all sides
     }),
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(0, 0, 0, 0.05)",
+    borderBottomColor: colors.border,
     borderTopWidth: 0, // Explicitly remove top border
     borderLeftWidth: 0, // Explicitly remove side borders
     borderRightWidth: 0,
@@ -1149,23 +1161,23 @@ const styles = StyleSheet.create({
   },
   categoryLabel: {
     fontSize: 12,
-    color: "#717171",
+    color: colors.textSecondary,
     fontFamily: fonts.regular,
   },
   categoryLabelActive: {
-    color: "#222",
+    color: colors.text,
     fontFamily: fonts.semiBold,
   },
   activeIndicator: {
     position: "absolute",
-    bottom: 0, // Position at the bottom of the category item
+    bottom: 0,
     left: "45%",
-    transform: [{ translateX: -22 }], // Center the indicator (half of width 40)
+    transform: [{ translateX: -22 }],
     width: 50,
     height: 3,
-    backgroundColor: "#000",
+    backgroundColor: colors.text,
     borderRadius: 2,
-    zIndex: 10, // Ensure it's above other elements
+    zIndex: 10,
   },
   loadingContainer: {
     justifyContent: "center",

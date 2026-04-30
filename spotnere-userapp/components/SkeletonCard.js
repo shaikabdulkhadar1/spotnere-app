@@ -1,10 +1,12 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 import { StyleSheet, View, Animated, Dimensions, Platform } from "react-native";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 
 const { width } = Dimensions.get("window");
 
 const SkeletonCard = ({ isSmall = false }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const pulseAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -69,7 +71,7 @@ const SkeletonCard = ({ isSmall = false }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   skeletonCard: {
     width: (width - 64) * 0.5,
     marginRight: 12,
@@ -80,7 +82,7 @@ const styles = StyleSheet.create({
     ...(Platform.OS === "android" && {
     overflow: "hidden",
     }),
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: {
       width: 0,
       height: 2,

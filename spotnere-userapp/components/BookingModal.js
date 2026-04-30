@@ -15,9 +15,10 @@ import {
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { getCurrentUser } from "../utils/auth";
+import { supabase } from "../config/supabase";
 import { useBookings } from "../context/BookingsContext";
 import { NativeModules } from "react-native";
 import RazorpayCheckout from "react-native-razorpay";
@@ -34,6 +35,8 @@ const API_BASE = (
   .replace(/\/$/, "");
 
 const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { refreshBookings } = useBookings();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
@@ -464,14 +467,17 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
 
       const numberOfGuests = chargePerGuest ? parseInt(guests, 10) || 0 : 1;
 
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token || "";
+
       const res = await fetch(`${API_BASE}/bookings/create-and-order`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "ngrok-skip-browser-warning": "true",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify({
-          userId: user.id,
           placeId,
           bookingDateTimeLocal,
           timezone: venueTimezone,
@@ -1093,7 +1099,7 @@ const BookingModal = ({ visible, onClose, placeDetails, vendor }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
@@ -1218,7 +1224,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     height: height * 0.8,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: {
       width: 0,
       height: -4,
@@ -1524,7 +1530,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 20,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: {
       width: 0,
       height: 4,

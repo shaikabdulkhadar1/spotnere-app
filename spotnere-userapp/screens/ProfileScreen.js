@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SvgUri } from "react-native-svg";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 import { fonts } from "../constants/fonts";
 import LoginForm from "../components/LoginForm";
 import LoginScreen from "./LoginScreen";
@@ -33,6 +33,8 @@ import {
 const { width } = Dimensions.get("window");
 
 const ProfileScreen = ({ onLoginSuccess, onBack, onTripPress }) => {
+  const { colors, theme: selectedTheme, setTheme: setSelectedTheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { refreshBookings, clearBookings } = useBookings();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userData, setUserData] = useState(null);
@@ -43,7 +45,6 @@ const ProfileScreen = ({ onLoginSuccess, onBack, onTripPress }) => {
   const [showAboutUs, setShowAboutUs] = useState(false);
   const [showHelpCenter, setShowHelpCenter] = useState(false);
   const [showThemeModal, setShowThemeModal] = useState(false);
-  const [selectedTheme, setSelectedTheme] = useState("Light");
   const [showUpcomingBookings, setShowUpcomingBookings] = useState(false);
   const [showPastBookings, setShowPastBookings] = useState(false);
   const [avatarStyle, setAvatarStyle] = useState(DEFAULT_AVATAR_STYLE);
@@ -660,7 +661,7 @@ const ProfileScreen = ({ onLoginSuccess, onBack, onTripPress }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   scrollView: {
     flex: 1,
     backgroundColor: colors.background,
@@ -839,7 +840,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
-    shadowColor: "#000",
+    shadowColor: colors.shadow,
     shadowOffset: {
       width: 0,
       height: 2,

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -8,10 +8,14 @@ import {
   Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import Constants from "expo-constants";
+import { useTheme } from "../context/ThemeContext";
 import { fonts } from "../constants/fonts";
 
 const AboutUsScreen = ({ onBack }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const handleLinkPress = async (url) => {
     try {
       const supported = await Linking.canOpenURL(url);
@@ -57,7 +61,8 @@ const AboutUsScreen = ({ onBack }) => {
         </Text>
         <Text style={styles.description}>
           Our mission is to connect people with extraordinary experiences and
-          help them create unforgettable memories at the places that matter most.
+          help them create unforgettable memories at the places that matter
+          most.
         </Text>
       </View>
 
@@ -140,7 +145,7 @@ const AboutUsScreen = ({ onBack }) => {
 
           <TouchableOpacity
             style={styles.contactItem}
-            onPress={() => handleLinkPress("tel:+1234567890")}
+            onPress={() => handleLinkPress("tel:+15715614356")}
             activeOpacity={0.7}
           >
             <Ionicons
@@ -151,7 +156,7 @@ const AboutUsScreen = ({ onBack }) => {
             />
             <View style={styles.contactInfo}>
               <Text style={styles.contactLabel}>Phone</Text>
-              <Text style={styles.contactValue}>+1 (234) 567-890</Text>
+              <Text style={styles.contactValue}>+1 (571) 561-4356</Text>
             </View>
             <Ionicons
               name="chevron-forward"
@@ -188,7 +193,9 @@ const AboutUsScreen = ({ onBack }) => {
       <View style={styles.section}>
         <View style={styles.versionCard}>
           <Text style={styles.versionLabel}>App Version</Text>
-          <Text style={styles.versionValue}>1.0.0</Text>
+          <Text style={styles.versionValue}>
+            {Constants.expoConfig?.version || "1.0.0"}
+          </Text>
         </View>
         <Text style={styles.copyright}>
           © 2024 Spotnere. All rights reserved.
@@ -198,154 +205,155 @@ const AboutUsScreen = ({ onBack }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollContent: {
-    paddingTop: 100,
-    paddingBottom: 100,
-    paddingHorizontal: 20,
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: 32,
-    position: "relative",
-  },
-  backButton: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 10,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: colors.text,
-    fontFamily: fonts.regular,
-  },
-  logoSection: {
-    alignItems: "center",
-    marginBottom: 32,
-  },
-  logoContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: colors.surface,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  appName: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: colors.text,
-    marginBottom: 8,
-    fontFamily: fonts.regular,
-  },
-  tagline: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    fontFamily: fonts.regular,
-  },
-  section: {
-    marginBottom: 32,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: colors.text,
-    marginBottom: 12,
-    fontFamily: fonts.regular,
-  },
-  description: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    lineHeight: 24,
-    marginBottom: 16,
-    fontFamily: fonts.regular,
-  },
-  featureList: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
-  },
-  featureItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  featureIcon: {
-    marginRight: 12,
-  },
-  featureText: {
-    fontSize: 16,
-    color: colors.text,
-    flex: 1,
-    fontFamily: fonts.regular,
-  },
-  contactCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  contactItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  contactIcon: {
-    marginRight: 12,
-  },
-  contactInfo: {
-    flex: 1,
-  },
-  contactLabel: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: 4,
-    fontFamily: fonts.regular,
-  },
-  contactValue: {
-    fontSize: 16,
-    color: colors.text,
-    fontFamily: fonts.regular,
-  },
-  versionCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  versionLabel: {
-    fontSize: 16,
-    color: colors.text,
-    fontFamily: fonts.regular,
-  },
-  versionValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.primary,
-    fontFamily: fonts.regular,
-  },
-  copyright: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: "center",
-    fontFamily: fonts.regular,
-  },
-});
+const createStyles = (colors) =>
+  StyleSheet.create({
+    scrollView: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    scrollContent: {
+      paddingTop: 100,
+      paddingBottom: 100,
+      paddingHorizontal: 20,
+    },
+    header: {
+      alignItems: "center",
+      marginBottom: 32,
+      position: "relative",
+    },
+    backButton: {
+      position: "absolute",
+      left: 0,
+      top: 0,
+      width: 40,
+      height: 40,
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 10,
+    },
+    headerTitle: {
+      fontSize: 24,
+      fontWeight: "700",
+      color: colors.text,
+      fontFamily: fonts.regular,
+    },
+    logoSection: {
+      alignItems: "center",
+      marginBottom: 32,
+    },
+    logoContainer: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: colors.surface,
+      justifyContent: "center",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    appName: {
+      fontSize: 32,
+      fontWeight: "700",
+      color: colors.text,
+      marginBottom: 8,
+      fontFamily: fonts.regular,
+    },
+    tagline: {
+      fontSize: 16,
+      color: colors.textSecondary,
+      fontFamily: fonts.regular,
+    },
+    section: {
+      marginBottom: 32,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: colors.text,
+      marginBottom: 12,
+      fontFamily: fonts.regular,
+    },
+    description: {
+      fontSize: 16,
+      color: colors.textSecondary,
+      lineHeight: 24,
+      marginBottom: 16,
+      fontFamily: fonts.regular,
+    },
+    featureList: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 16,
+    },
+    featureItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    featureIcon: {
+      marginRight: 12,
+    },
+    featureText: {
+      fontSize: 16,
+      color: colors.text,
+      flex: 1,
+      fontFamily: fonts.regular,
+    },
+    contactCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      overflow: "hidden",
+    },
+    contactItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 16,
+      paddingHorizontal: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    contactIcon: {
+      marginRight: 12,
+    },
+    contactInfo: {
+      flex: 1,
+    },
+    contactLabel: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      marginBottom: 4,
+      fontFamily: fonts.regular,
+    },
+    contactValue: {
+      fontSize: 16,
+      color: colors.text,
+      fontFamily: fonts.regular,
+    },
+    versionCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 16,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    versionLabel: {
+      fontSize: 16,
+      color: colors.text,
+      fontFamily: fonts.regular,
+    },
+    versionValue: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.primary,
+      fontFamily: fonts.regular,
+    },
+    copyright: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      textAlign: "center",
+      fontFamily: fonts.regular,
+    },
+  });
 
 export default AboutUsScreen;

@@ -3,7 +3,7 @@
  * Uses TripCard, filters for past dates + paid/success status
  */
 
-import React from "react";
+import React, { useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -18,7 +18,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import TripCard from "../components/TripCard";
 import SkeletonCard from "../components/SkeletonCard";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { useBookings } from "../context/BookingsContext";
 
@@ -27,6 +27,8 @@ const { height } = Dimensions.get("window");
 const PAID_STATUSES = ["PAID", "SUCCESS", "CONFIRMED"];
 
 const PastBookingsScreen = ({ onTripPress, onBack }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { bookings, loading, error, hasUser, refreshBookings } = useBookings();
 
   const now = new Date().toISOString();
@@ -138,7 +140,7 @@ const PastBookingsScreen = ({ onTripPress, onBack }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

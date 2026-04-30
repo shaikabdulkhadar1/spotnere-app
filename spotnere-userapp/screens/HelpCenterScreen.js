@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -11,12 +11,15 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 import { fonts } from "../constants/fonts";
 
 const { width } = Dimensions.get("window");
 
 const HelpCenterScreen = ({ onBack }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const handleCall = async () => {
     try {
       const phoneNumber = "+1234567890";
@@ -53,7 +56,7 @@ const HelpCenterScreen = ({ onBack }) => {
       Alert.alert(
         "Unable to Open Phone",
         `Please call us at: +1 (234) 567-890`,
-        [{ text: "OK" }]
+        [{ text: "OK" }],
       );
     }
   };
@@ -176,7 +179,7 @@ const HelpCenterScreen = ({ onBack }) => {
               </View>
               <View style={styles.contactInfo}>
                 <Text style={styles.contactLabel}>Phone</Text>
-                <Text style={styles.contactValue}>+1 (234) 567-890</Text>
+                <Text style={styles.contactValue}>+1 (571) 561-4356</Text>
                 <Text style={styles.contactDescription}>
                   Call us during business hours
                 </Text>
@@ -268,178 +271,179 @@ const HelpCenterScreen = ({ onBack }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingTop: 100,
-    paddingBottom: 100,
-    paddingHorizontal: 20,
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: 32,
-    position: "relative",
-  },
-  backButton: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 10,
-  },
-  iconSection: {
-    alignItems: "center",
-    marginBottom: 32,
-  },
-  iconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: colors.surface,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: colors.text,
-    marginBottom: 8,
-    textAlign: "center",
-    fontFamily: fonts.regular,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    textAlign: "center",
-    fontFamily: fonts.regular,
-  },
-  section: {
-    marginBottom: 32,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: colors.text,
-    marginBottom: 12,
-    fontFamily: fonts.regular,
-  },
-  contactCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  contactItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  contactIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.cardBackground,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  contactIcon: {
-    // Icon styling is handled by Ionicons props
-  },
-  contactInfo: {
-    flex: 1,
-  },
-  contactLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: colors.textSecondary,
-    marginBottom: 4,
-    fontFamily: fonts.regular,
-  },
-  contactValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.text,
-    marginBottom: 4,
-    fontFamily: fonts.regular,
-  },
-  contactDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    fontFamily: fonts.regular,
-  },
-  faqCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
-  },
-  faqItem: {
-    marginBottom: 20,
-  },
-  faqQuestion: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.text,
-    marginBottom: 8,
-    fontFamily: fonts.regular,
-  },
-  faqAnswer: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-    fontFamily: fonts.regular,
-  },
-  actionButtonsContainer: {
-    flexDirection: "row",
-    marginTop: 24,
-    gap: 12,
-  },
-  callButton: {
-    flex: 1,
-    backgroundColor: colors.primary,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    borderRadius: 12,
-    gap: 8,
-  },
-  callButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#FFFFFF",
-    fontFamily: fonts.regular,
-  },
-  chatButton: {
-    flex: 1,
-    backgroundColor: colors.cardBackground,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    gap: 8,
-  },
-  chatButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.primary,
-    fontFamily: fonts.regular,
-  },
-});
+const createStyles = (colors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingTop: 100,
+      paddingBottom: 100,
+      paddingHorizontal: 20,
+    },
+    header: {
+      alignItems: "center",
+      marginBottom: 32,
+      position: "relative",
+    },
+    backButton: {
+      position: "absolute",
+      left: 0,
+      top: 0,
+      width: 40,
+      height: 40,
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 10,
+    },
+    iconSection: {
+      alignItems: "center",
+      marginBottom: 32,
+    },
+    iconContainer: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: colors.surface,
+      justifyContent: "center",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    title: {
+      fontSize: 24,
+      fontWeight: "700",
+      color: colors.text,
+      marginBottom: 8,
+      textAlign: "center",
+      fontFamily: fonts.regular,
+    },
+    subtitle: {
+      fontSize: 16,
+      color: colors.textSecondary,
+      textAlign: "center",
+      fontFamily: fonts.regular,
+    },
+    section: {
+      marginBottom: 32,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: colors.text,
+      marginBottom: 12,
+      fontFamily: fonts.regular,
+    },
+    contactCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      overflow: "hidden",
+    },
+    contactItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 20,
+      paddingHorizontal: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    contactIconContainer: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: colors.cardBackground,
+      justifyContent: "center",
+      alignItems: "center",
+      marginRight: 12,
+    },
+    contactIcon: {
+      // Icon styling is handled by Ionicons props
+    },
+    contactInfo: {
+      flex: 1,
+    },
+    contactLabel: {
+      fontSize: 14,
+      fontWeight: "500",
+      color: colors.textSecondary,
+      marginBottom: 4,
+      fontFamily: fonts.regular,
+    },
+    contactValue: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.text,
+      marginBottom: 4,
+      fontFamily: fonts.regular,
+    },
+    contactDescription: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      fontFamily: fonts.regular,
+    },
+    faqCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 16,
+    },
+    faqItem: {
+      marginBottom: 20,
+    },
+    faqQuestion: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.text,
+      marginBottom: 8,
+      fontFamily: fonts.regular,
+    },
+    faqAnswer: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      lineHeight: 20,
+      fontFamily: fonts.regular,
+    },
+    actionButtonsContainer: {
+      flexDirection: "row",
+      marginTop: 24,
+      gap: 12,
+    },
+    callButton: {
+      flex: 1,
+      backgroundColor: colors.primary,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 16,
+      borderRadius: 12,
+      gap: 8,
+    },
+    callButtonText: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: "#FFFFFF",
+      fontFamily: fonts.regular,
+    },
+    chatButton: {
+      flex: 1,
+      backgroundColor: colors.cardBackground,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 16,
+      borderRadius: 12,
+      borderWidth: 2,
+      borderColor: colors.primary,
+      gap: 8,
+    },
+    chatButtonText: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.primary,
+      fontFamily: fonts.regular,
+    },
+  });
 
 export default HelpCenterScreen;

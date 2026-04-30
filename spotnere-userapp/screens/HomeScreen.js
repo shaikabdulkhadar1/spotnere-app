@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -12,7 +12,7 @@ import {
 import { api } from "../api/client";
 import PlaceCard from "../components/PlaceCard";
 import SkeletonCard from "../components/SkeletonCard";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { formatListingPrice } from "../utils/placePrice";
 import { getCachedPlaces, setCachedPlaces } from "../utils/placesCache";
@@ -29,6 +29,9 @@ const HomeScreen = ({
   filters = { sortBy: "rating", rating: 0, category: "All", subCategory: "" },
   searchQuery = "",
 }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [allPlacesData, setAllPlacesData] = useState([]); // Store all fetched places
   const [displayedCount, setDisplayedCount] = useState(TOP_K); // Number of places currently displayed
   const [loading, setLoading] = useState(true);
@@ -351,7 +354,7 @@ const HomeScreen = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: "center",
@@ -431,7 +434,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   loadMoreButtonText: {
-    color: "#000",
+    color: colors.text,
     fontSize: 16,
     fontWeight: "600",
     fontFamily: fonts.regular,

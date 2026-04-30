@@ -6,6 +6,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import { api } from "../api/client";
+import { supabase } from "../config/supabase";
 
 // Password hashing utility functions
 const SALT_ROUNDS = 10000; // Number of iterations for PBKDF2
@@ -74,6 +75,20 @@ const AUTH_KEY = "@spotnere_user";
 const USER_DATA_KEY = "@spotnere_user_data";
 
 /**
+ * Establish a Supabase Auth session (client-side JWT for RLS + Bearer token)
+ */
+async function establishSupabaseSession(email, password) {
+  try {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      console.warn("[Auth] Supabase session failed (non-fatal):", error.message);
+    }
+  } catch (err) {
+    console.warn("[Auth] Supabase session error (non-fatal):", err?.message);
+  }
+}
+
+/**
  * Get current user data
  * @returns {Promise<Object|null>} User data or null if not logged in
  */
@@ -122,6 +137,9 @@ export const registerUser = async (formData) => {
     await AsyncStorage.setItem(AUTH_KEY, "authenticated");
     await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(formattedUser));
 
+    // Establish Supabase Auth session for JWT/RLS
+    await establishSupabaseSession(formData.email, formData.password);
+
     return {
       success: true,
       user: formattedUser,
@@ -156,6 +174,9 @@ export const loginUser = async (email, password) => {
 
     await AsyncStorage.setItem(AUTH_KEY, "authenticated");
     await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(formattedUser));
+
+    // Establish Supabase Auth session for JWT/RLS
+    await establishSupabaseSession(email, password);
 
     return {
       success: true,
@@ -195,6 +216,7 @@ export const login = async (userData) => {
  */
 export const logout = async () => {
   try {
+    await supabase.auth.signOut();
     await AsyncStorage.removeItem(AUTH_KEY);
     await AsyncStorage.removeItem(USER_DATA_KEY);
     return true;

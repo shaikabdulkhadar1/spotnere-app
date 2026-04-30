@@ -150,14 +150,14 @@ export const clearFavorites = async () => {
  */
 export const saveFavoriteToDatabase = async (userId, placeId) => {
   try {
-    if (!userId || !placeId) {
+    if (!placeId) {
       return {
         success: false,
-        error: "User ID and Place ID are required",
+        error: "Place ID is required",
       };
     }
 
-    await api.addFavorite(userId, placeId);
+    await api.addFavorite(placeId);
     await clearFavoritesCache(userId);
     return { success: true, error: null };
   } catch (error) {
@@ -176,14 +176,14 @@ export const saveFavoriteToDatabase = async (userId, placeId) => {
  */
 export const removeFavoriteFromDatabase = async (userId, placeId) => {
   try {
-    if (!userId || !placeId) {
+    if (!placeId) {
       return {
         success: false,
-        error: "User ID and Place ID are required",
+        error: "Place ID is required",
       };
     }
 
-    await api.removeFavorite(userId, placeId);
+    await api.removeFavorite(placeId);
     await clearFavoritesCache(userId);
     return { success: true, error: null };
   } catch (error) {
@@ -202,8 +202,8 @@ export const removeFavoriteFromDatabase = async (userId, placeId) => {
  */
 export const isFavoriteInDatabase = async (userId, placeId) => {
   try {
-    if (!userId || !placeId) return false;
-    const { favorited } = await api.checkFavorite(userId, placeId);
+    if (!placeId) return false;
+    const { favorited } = await api.checkFavorite(placeId);
     return !!favorited;
   } catch {
     return false;

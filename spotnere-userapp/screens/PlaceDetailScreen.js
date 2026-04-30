@@ -9,7 +9,7 @@
  * - You can copy-paste as-is.
  */
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -34,7 +34,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { CircleUserRound } from "lucide-react-native";
 import { Image as ExpoImage } from "expo-image";
 import { api } from "../api/client";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { getCurrentUser } from "../utils/auth";
 import {
@@ -58,6 +58,9 @@ const CARD_WIDTH = width - 40 - ARROW_SIZE * 2;
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 
 const PlaceDetailScreen = ({ placeId, onClose }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [placeDetails, setPlaceDetails] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [galleryImages, setGalleryImages] = useState([]);
@@ -233,7 +236,6 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
       setSubmittingReview(true);
 
       await api.addReview(placeId, {
-        userId: user.id,
         review: trimmed,
         rating: Number(addReviewRating),
       });
@@ -1176,7 +1178,7 @@ const PlaceDetailScreen = ({ placeId, onClose }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
   // Loading / error state
@@ -1353,7 +1355,7 @@ const styles = StyleSheet.create({
     gap: 8,
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
+        shadowColor: colors.shadow,
         shadowOpacity: 0.05,
         shadowRadius: 10,
         shadowOffset: { width: 0, height: 5 },
@@ -1392,7 +1394,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
+        shadowColor: colors.shadow,
         shadowOpacity: 0.06,
         shadowRadius: 14,
         shadowOffset: { width: 0, height: 6 },
@@ -1513,7 +1515,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
+        shadowColor: colors.shadow,
         shadowOpacity: 0.05,
         shadowRadius: 12,
         shadowOffset: { width: 0, height: 6 },
@@ -1593,7 +1595,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
+        shadowColor: colors.shadow,
         shadowOpacity: 0.08,
         shadowRadius: 10,
         shadowOffset: { width: 0, height: 5 },
@@ -1624,7 +1626,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
+        shadowColor: colors.shadow,
         shadowOpacity: 0.04,
         shadowRadius: 12,
         shadowOffset: { width: 0, height: 6 },
@@ -1702,7 +1704,7 @@ const styles = StyleSheet.create({
     padding: 20,
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
+        shadowColor: colors.shadow,
         shadowOpacity: 0.2,
         shadowRadius: 20,
         shadowOffset: { width: 0, height: 10 },

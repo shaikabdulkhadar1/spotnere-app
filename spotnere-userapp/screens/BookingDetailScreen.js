@@ -4,7 +4,7 @@
  * Date/time strings are pre-formatted by the backend in the venue's timezone.
  */
 
-import React from "react";
+import React, { useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -17,24 +17,27 @@ import {
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 import { fonts } from "../constants/fonts";
 
 const { width } = Dimensions.get("window");
 
-const DetailRow = ({ icon, label, value }) => (
-  <View style={styles.detailRow}>
-    <View style={styles.detailIconWrap}>
-      <Ionicons name={icon} size={20} color={colors.primary} />
-    </View>
-    <View style={styles.detailContent}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
-    </View>
-  </View>
-);
-
 const BookingDetailScreen = ({ booking, onClose, onViewPlace }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  const DetailRow = ({ icon, label, value }) => (
+    <View style={styles.detailRow}>
+      <View style={styles.detailIconWrap}>
+        <Ionicons name={icon} size={20} color={colors.primary} />
+      </View>
+      <View style={styles.detailContent}>
+        <Text style={styles.detailLabel}>{label}</Text>
+        <Text style={styles.detailValue}>{value}</Text>
+      </View>
+    </View>
+  );
+
   if (!booking) {
     return (
       <View style={styles.container}>
@@ -162,7 +165,7 @@ const BookingDetailScreen = ({ booking, onClose, onViewPlace }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -233,7 +236,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
+        shadowColor: colors.shadow,
         shadowOpacity: 0.06,
         shadowRadius: 10,
         shadowOffset: { width: 0, height: 4 },

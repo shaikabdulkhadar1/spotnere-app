@@ -3,7 +3,7 @@
  * Shows place image, title, booking date/time, guests, ref, and status
  */
 
-import React from "react";
+import React, { useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -13,10 +13,10 @@ import {
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 import { fonts } from "../constants/fonts";
 
-const getStatusColor = (status) => {
+const getStatusColor = (status, colors) => {
   switch ((status || "").toUpperCase()) {
     case "PAID":
     case "SUCCESS":
@@ -33,9 +33,11 @@ const getStatusColor = (status) => {
 };
 
 const TripCard = ({ trip, onPress }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const dateStr = trip.bookingDateFormatted || "—";
   const timeStr = trip.bookingTimeFormatted || "";
-  const statusColor = getStatusColor(trip.paymentStatus);
+  const statusColor = getStatusColor(trip.paymentStatus, colors);
 
   return (
     <TouchableOpacity
@@ -137,7 +139,7 @@ const TripCard = ({ trip, onPress }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   card: {
     flexDirection: "row",
     alignItems: "center",
@@ -149,7 +151,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
+        shadowColor: colors.shadow,
         shadowOpacity: 0.06,
         shadowRadius: 10,
         shadowOffset: { width: 0, height: 4 },

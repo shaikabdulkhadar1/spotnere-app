@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -13,13 +13,16 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import TripCard from "../components/TripCard";
 import SkeletonCard from "../components/SkeletonCard";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { useBookings } from "../context/BookingsContext";
 
 const { width, height } = Dimensions.get("window");
 
 const TripsScreen = ({ userCountry, onTripPress, onBack }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const { bookings, loading, error, hasUser, refreshBookings } = useBookings();
 
   // Filter by country when userCountry is set (include bookings with no country)
@@ -170,7 +173,7 @@ const TripsScreen = ({ userCountry, onTripPress, onBack }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

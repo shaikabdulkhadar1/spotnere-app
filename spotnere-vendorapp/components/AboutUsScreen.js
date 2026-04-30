@@ -13,6 +13,7 @@ import {
   Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants";
 import { useTheme } from "../contexts/ThemeContext";
 import { fonts } from "../constants/fonts";
 
@@ -62,7 +63,7 @@ const AboutUsScreen = ({ onBack }) => {
               </View>
             </View>
             <Text style={styles.appName}>Spotnere Vendor</Text>
-            <Text style={styles.appVersion}>Version 1.0.0</Text>
+            <Text style={styles.appVersion}>Version {Constants.expoConfig?.version || "1.0.0"}</Text>
           </View>
         </View>
 

@@ -31,7 +31,7 @@ export const useBookings = () => {
 
 const fetchBookingsFromApi = async (userId) => {
   if (!userId) return [];
-  return await api.getBookings(userId);
+  return await api.getBookings();
 };
 
 export const BookingsProvider = ({ children }) => {

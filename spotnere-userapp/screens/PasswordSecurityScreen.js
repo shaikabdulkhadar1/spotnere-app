@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -10,12 +10,16 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { api } from "../api/client";
 import { getCurrentUser } from "../utils/auth";
+import { rules, collectErrors } from "../utils/validate";
 
 const PasswordSecurityScreen = ({ onBack }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [formData, setFormData] = useState({
     currentPassword: "",
     newPassword: "",
@@ -28,30 +32,16 @@ const PasswordSecurityScreen = ({ onBack }) => {
   const [isSaving, setIsSaving] = useState(false);
 
   const validateForm = () => {
-    const newErrors = {};
-
-    if (!formData.currentPassword) {
-      newErrors.currentPassword = "Current password is required";
+    const errs = collectErrors({
+      currentPassword: rules.required(formData.currentPassword, "Current password"),
+      newPassword: rules.password(formData.newPassword),
+      confirmPassword: rules.confirmPassword(formData.confirmPassword, formData.newPassword),
+    });
+    if (!errs.newPassword && formData.currentPassword === formData.newPassword) {
+      errs.newPassword = "New password must be different from current password";
     }
-
-    if (!formData.newPassword) {
-      newErrors.newPassword = "New password is required";
-    } else if (formData.newPassword.length < 8) {
-      newErrors.newPassword = "Password must be at least 8 characters";
-    }
-
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = "Please confirm your new password";
-    } else if (formData.newPassword !== formData.confirmPassword) {
-      newErrors.confirmPassword = "Passwords do not match";
-    }
-
-    if (formData.currentPassword === formData.newPassword) {
-      newErrors.newPassword = "New password must be different from current password";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
   const handleSave = async () => {
@@ -70,7 +60,6 @@ const PasswordSecurityScreen = ({ onBack }) => {
 
       try {
         await api.updatePassword(
-          user.id,
           formData.currentPassword,
           formData.newPassword
         );
@@ -224,7 +213,7 @@ const PasswordSecurityScreen = ({ onBack }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   scrollView: {
     flex: 1,
     backgroundColor: colors.background,

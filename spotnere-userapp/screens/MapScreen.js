@@ -21,7 +21,7 @@ import * as Location from "expo-location";
 import { Country } from "country-state-city";
 import { GoogleMaps, AppleMaps } from "expo-maps";
 import { api } from "../api/client";
-import { colors } from "../constants/colors";
+import { useTheme } from "../context/ThemeContext";
 import { fonts } from "../constants/fonts";
 import { formatListingPrice } from "../utils/placePrice";
 import { getCachedPlaces, setCachedPlaces } from "../utils/placesCache";
@@ -149,6 +149,9 @@ const formatPlacesForCarousel = (allPlaces) => {
 };
 
 const MapScreen = ({ onBack, userCountry, onPlacePress }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const mapRef = useRef(null);
   /** Clears delayed camera state sync (keeps React `cameraPosition` aligned with native after animations). */
   const cameraStateSyncTimeoutRef = useRef(null);
@@ -659,7 +662,7 @@ const MapScreen = ({ onBack, userCountry, onPlacePress }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
